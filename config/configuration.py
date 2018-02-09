@@ -1,0 +1,17 @@
+class Configuration:
+
+    AGREEMENT_TIMEOUT = 6
+    WEAK_AGREEMENT_TIMEOUT = 12
+
+    STABLE_CONNECTIONS = True
+    SDO_NUMBER = 3
+    MAX_NEIGHBORS_RATIO = 1/3
+    NEIGHBOR_PROBABILITY = 64
+
+    NODE_NUMBER = 2
+    BUNDLE_PERCENTAGE = 75
+
+    LOG_LEVEL = "IMPORTANT"
+
+    RAP_INSTANCE = "config/rap_instance.json"
+    RESULTS_FOLDER = "results"
