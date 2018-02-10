@@ -28,21 +28,57 @@ while [ ${sdo_number} -le 30 ]; do
 
         while [ ${node_number} -le 4 ]; do
 
+            file_name="validation/"${sdo_number}"sdos__"${neighbor_probability}"neighbor_prob__"${node_number}"nodes.txt"
+            echo "Output file: "${file_name}
+            echo ${sdo_number}" sdos, "${neighbor_probability}" neighbor_prob, "${node_number}" nodes " > ${file_name}
+
             bundle_percentage=40
             sed -i "12s/.*/    BUNDLE_PERCENTAGE = ${bundle_percentage}/" config/configuration.py
 
             while [ ${bundle_percentage} -le 80 ]; do
 
                 # increase timeout according with the problem size
-                agreement_timeout=$(($((60*${bundle_percentage}/80 + 20*${sdo_number}/30 + 20*${node_number}/4))/10))
+                agreement_timeout=$(($((60*${bundle_percentage}/80 + 20*${sdo_number}/30 + 20*${node_number}/4))/8))
                 weak_agreement_timeout=$((${agreement_timeout}*2))
                 sed -i "3s/.*/    AGREEMENT_TIMEOUT = ${agreement_timeout}/" config/configuration.py
                 sed -i "4s/.*/    WEAK_AGREEMENT_TIMEOUT = ${weak_agreement_timeout}/" config/configuration.py
 
+                # fix sample frequency
+                sample_frequency=$(echo "scale=3; (${agreement_timeout}/22)^3*5" | bc -l )
+                sed -i "14s/.*/    SAMPLE_FREQUENCY = ${sample_frequency}/" config/configuration.py
+
+                # output some info
                 echo -e "Running agreement with "${sdo_number}" sdos, "${neighbor_probability}" neighbor_prob, "${node_number}" nodes "${bundle_percentage}" bundle_percentage ..."
-                echo -e "AGREEMENT_TIMEOUT =  "${agreement_timeout}
-                python3 test_script.py > "validation/"${sdo_number}"sdos__"${neighbor_probability}"neighbor_prob__"${node_number}"nodes__"${bundle_percentage}"bundle_percentage.txt"
+                echo -e "AGREEMENT_TIMEOUT = "${agreement_timeout}
+                echo -e "SAMPLE_FREQUENCY = "${sample_frequency}
+
+                # print info into log file
+                echo "" >> ${file_name}
+                echo "" >> ${file_name}
+                echo "" >> ${file_name}
+                echo "-----------------------------------------" >> ${file_name}
+                echo "-" >> ${file_name}
+                echo "SDO_NUMBER: "${sdo_number} >> ${file_name}
+                echo "NEIGHBOR_PROBABILITY: "${neighbor_probability} >> ${file_name}
+                echo "NODE_NUMBER: "${node_number} >> ${file_name}
+                echo "BUNDLE_PERCENTAGE_LENGTH: "${bundle_percentage} >> ${file_name}
+                echo "-" >> ${file_name}
+                echo "AGREEMENT_TIMEOUT: "${agreement_timeout} >> ${file_name}
+                echo "SAMPLE_FREQUENCY: "${sample_frequency} >> ${file_name}
+                echo "-" >> ${file_name}
+
+                # run the instance
                 killall python3
+                # python3 -m scripts.message_monitor &
+                # monitor_pid=$!
+                python3 test_script.py >> ${file_name}
+                # kill -2 ${monitor_pid}
+                # wait ${monitor_pid}
+                killall python3
+                python3 -m scripts.delete_queues
+                # kill -9 ${monitor_pid}
+
+                echo "-----------------------------------------" >> ${file_name}
 
                 bundle_percentage=$((${bundle_percentage}+5))
                 sed -i "12s/.*/    BUNDLE_PERCENTAGE = ${bundle_percentage}/" config/configuration.py

@@ -84,10 +84,13 @@ if __name__ == "__main__":
     sdo_node = SDONode(SDO_NAME, rap, SERVICE_BUNDLE)
 
     # Start scheduling
-    strong, placement = sdo_node.start_distributed_scheduling()
+    strong, placement, rates = sdo_node.start_distributed_scheduling()
 
-    filename = Configuration.RESULTS_FOLDER + "/" + SDO_NAME + ".json"
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
-    with open(filename, "w") as f:
+    placement_filename = Configuration.RESULTS_FOLDER + "/placement_" + SDO_NAME + ".json"
+    os.makedirs(os.path.dirname(placement_filename), exist_ok=True)
+    with open(placement_filename, "w") as f:
         f.write(json.dumps(placement, indent=4))
 
+    rates_filename = Configuration.RESULTS_FOLDER + "/rates_" + SDO_NAME + ".json"
+    with open(rates_filename, "w") as f:
+        f.write(json.dumps(list(rates.items()), indent=4))

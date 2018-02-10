@@ -1,6 +1,6 @@
-import plotly.plotly as py
-from plotly.graph_objs import *
-import networkx as nx
+# import plotly.plotly as py
+# from plotly.graph_objs import *
+# import networkx as nx
 
 from config.configuration import Configuration
 from sdo_node.utils.neighborhood import NeighborhoodDetector
@@ -9,8 +9,8 @@ from sdo_node.utils.neighborhood import NeighborhoodDetector
 class NetworkPlotter:
 
     def __init__(self, sdos):
-        self.topology = nx.Graph()
-        self.topology.add_nodes_from(sdos)
+        # self.topology = nx.Graph()
+        # self.topology.add_nodes_from(sdos)
         self.neighborhoods = dict()
         for sdo in sdos:
             neighbors = NeighborhoodDetector(sdos=sdos,
@@ -18,9 +18,10 @@ class NetworkPlotter:
                                              neighbor_probability=Configuration.NEIGHBOR_PROBABILITY,
                                              max_neighbors_ratio=Configuration.MAX_NEIGHBORS_RATIO,
                                              stable_connections=Configuration.STABLE_CONNECTIONS).get_neighborhood()
-            self.topology.add_edges_from([(sdo, sdo2) for sdo2 in neighbors])
+            # self.topology.add_edges_from([(sdo, sdo2) for sdo2 in neighbors])
             self.neighborhoods[sdo] = neighbors
 
+    '''
     def graphical_plot(self):
 
         pos = nx.fruchterman_reingold_layout(self.topology)
@@ -82,34 +83,6 @@ class NetworkPlotter:
         # nx.draw(self.topology)
         # plt.show()
 
-        '''
-        Xv = [pos[k][0] for k in self.topology.nodes()]
-        Yv = [pos[k][1] for k in self.topology.nodes()]
-        Xed = []
-        Yed = []
-        for edge in self.topology.edges():
-            Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
-            Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
-
-        edge_trace = Scatter(x=Xed,
-                             y=Yed,
-                             mode='lines',
-                             line=Line(color='rgb(210,210,210)', width=1),
-                             hoverinfo='none'
-                             )
-        node_trace = Scatter(x=Xv,
-                             y=Yv,
-                             mode='markers',
-                             name='net',
-                             marker=Marker(symbol='dot',
-                                           size=5,
-                                           color='#6959CD',
-                                           line=Line(color='rgb(50,50,50)', width=0.5)
-                                           ),
-                             text=self.topology.nodes(),
-                             hoverinfo='text'
-                             )
-        '''
         # Color node points by the number of connections.
 
         for node, adjacencies in enumerate(self.topology.adjacency_list()):
@@ -136,6 +109,8 @@ class NetworkPlotter:
 
         # plot
         py.plot(fig, filename='networkx')
+
+    '''
 
     def print_topology(self):
         print("-------- Topology ---------")

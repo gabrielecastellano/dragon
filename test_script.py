@@ -6,6 +6,7 @@ import subprocess
 
 import itertools
 # from numpy import random
+from collections import OrderedDict
 
 from subprocess import TimeoutExpired
 
@@ -83,6 +84,8 @@ for i in range(Configuration.SDO_NUMBER):
     sdo_name = "sdo" + str(i)
     service_bundle = [s for s in rap.services
                       if int(str(int(hashlib.sha256((sdo_name+s).encode()).hexdigest(), 16))[-2:]) < Configuration.BUNDLE_PERCENTAGE]
+    if len(service_bundle) == 0:
+        service_bundle.append(rap.services[0])
     print(sdo_name + " : " + str(service_bundle))
     # call("python3 main.py " + sdo_name + " " + ''.join(service_bundle) + " -l VERBOSE --log-on-file &", shell=True)
     #if sdo_name != "sdo0":
@@ -94,24 +97,53 @@ for i in range(Configuration.SDO_NUMBER):
 try:
     for p in p_list:
         p.wait(timeout=200)
-    results = dict()
+    placements = dict()
+    message_rates = dict()
     for i in range(Configuration.SDO_NUMBER):
         sdo_name = "sdo" + str(i)
-        results_file = Configuration.RESULTS_FOLDER + "/" + sdo_name + ".json"
+        placement_file = Configuration.RESULTS_FOLDER + "/placement_" + sdo_name + ".json"
+        rates_file = Configuration.RESULTS_FOLDER + "/rates_" + sdo_name + ".json"
         try:
-            with open(results_file, "r") as f:
+            with open(placement_file, "r") as f:
                 placement = json.loads(f.read())
-                results[sdo_name] = placement
+                placements[sdo_name] = placement
+            with open(rates_file, "r") as f:
+                rates = OrderedDict(json.loads(f.read()))
+                message_rates[sdo_name] = rates
         except FileNotFoundError:
             continue
-    results_file = Configuration.RESULTS_FOLDER + "/results.json"
-    with open(results_file, "w") as f:
-        f.write(json.dumps(results, indent=4))
+
+    placement_file = Configuration.RESULTS_FOLDER + "/results.json"
+    with open(placement_file, "w") as f:
+        f.write(json.dumps(placements, indent=4))
     residual_resources = dict(rap.available_resources)
-    for service, function, node in list(itertools.chain(*results.values())):
+    for service, function, node in list(itertools.chain(*placements.values())):
         residual_resources[node] = rap.sub_resources(residual_resources[node], rap.consumption[function])
-    print("Allocation: \n" + pprint.pformat(results))
+    print("Allocation: \n" + pprint.pformat(placements))
     print("Residual resources: \n" + pprint.pformat(residual_resources))
+
+    begin_time = min([float(next(iter(message_rates[sdo])).split(":")[0]) for sdo in message_rates])
+    next_begin_time = begin_time
+    global_rates = OrderedDict()
+    while len(message_rates) > 0:
+        # next_begin_time = min([float(next(iter(message_rates[sdo])).split(":")[0]) for sdo in message_rates])
+        # next_end_time = max([float(next(iter(message_rates[sdo])).split(":")[1]) for sdo in message_rates])
+        next_end_time = next_begin_time+Configuration.SAMPLE_FREQUENCY
+        in_range_counter = 0
+        for sdo in message_rates:
+            if len(message_rates[sdo]) > 0:
+                # in_range_keys = [k for k in message_rates[sdo] if float(k.split(":")[0]) >= next_begin_time and float(k.split(":")[1]) <= next_end_time]
+                in_range_keys = [k for k in message_rates[sdo] if float(k.split(":")[1]) <= next_end_time]
+                in_range_counter += sum([message_rates[sdo][k] for k in in_range_keys])
+                for k in in_range_keys:
+                    del message_rates[sdo][k]
+        for sdo in dict(message_rates):
+            if len(message_rates[sdo]) == 0:
+                del message_rates[sdo]
+        global_rates[float("{0:.3f}".format(next_end_time-begin_time))] = in_range_counter/(next_end_time-next_begin_time)
+        next_begin_time = next_end_time
+
+    print("Message rates: \n" + pprint.pformat(global_rates))
 
 except TimeoutExpired:
     for p in p_list:

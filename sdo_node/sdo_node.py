@@ -1,6 +1,7 @@
 import logging
 import pprint
 import time
+from collections import OrderedDict
 
 from datetime import datetime
 from threading import Lock, Thread, Condition
@@ -42,6 +43,7 @@ class SDONode:
         self.received_messages = 0
 
         # times
+        self.begin_time = 0
         self.last_update_time = 0
         self.agreement_time = 0
         self.last_message_time = 0
@@ -53,9 +55,13 @@ class SDONode:
         self.queue_locks = {sdo: Lock() for sdo in self.neighborhood}
         self.cv = Condition()
 
+        # validation
+        self.sent_count = 0
+        self.message_rates = OrderedDict()
+
     def start_distributed_scheduling(self):
 
-        begin_time = time.time()
+        self.begin_time = time.time()
 
         # connect
         self._messaging.connect()
@@ -96,16 +102,16 @@ class SDONode:
         print(self.sdo_name +
               " | strong: " + str(strong_agreement).ljust(5) +
               " | winners: " + str(sorted(self.sdo_bidder.get_winners())) +
-              " | last update on: " + str(self.last_update_time - begin_time)[:5] +
-              " | agreement on: " + str(self.agreement_time - begin_time)[:5] +
-              " | last message on: " + str(self.last_message_time - begin_time)[:5] +
-              " | total time: " + str(self.end_time - begin_time)[:5] +
+              " | last update on: " + str(self.last_update_time - self.begin_time)[:5] +
+              " | agreement on: " + str(self.agreement_time - self.begin_time)[:5] +
+              " | last message on: " + str(self.last_message_time - self.begin_time)[:5] +
+              " | total time: " + str(self.end_time - self.begin_time)[:5] +
               " | sent messages: " + str(self.message_counter).rjust(7) +
               " | received messages: " + str(self.received_messages).rjust(7))
 
         # disconnect
         self._messaging.disconnect()
-        return strong_agreement, self.sdo_bidder.implementations
+        return strong_agreement, self.sdo_bidder.implementations, self.message_rates
 
     def consumer(self):
         self._messaging.connect_write()
@@ -228,6 +234,23 @@ class SDONode:
             self.send_bid_message(neighbor, message_to_broadcast)
             logging.info("Message has been sent.")
             self.message_counter += 1
+
+        # store rate for validation
+        timestamp = time.time()
+        sent_time = float("{0:.3f}".format(timestamp))
+        if len(self.message_rates) == 0:
+            self.last_time = float("{0:.3f}".format(self.begin_time))
+        else:
+            last_begin_time = float(next(reversed(self.message_rates)).split(":")[0])
+            if last_begin_time == self.last_time:
+                del self.message_rates[next(reversed(self.message_rates))]
+
+        if sent_time - self.last_time > Configuration.SAMPLE_FREQUENCY:
+            self.message_rates[str(self.last_time) + ":" + str(sent_time)] = self.message_counter - self.sent_count
+            self.sent_count = self.message_counter
+            self.last_time = sent_time
+        else:
+            self.message_rates[str(self.last_time) + ":" + str(sent_time)] = self.message_counter - self.sent_count
 
         logging.info("broadcast successfully completed.")
 
