@@ -42,7 +42,7 @@ while [ ${sdo_number} -le 30 ]; do
             while [ ${bundle_percentage} -le 80 ]; do
 
                 # increase timeout according with the problem size
-                agreement_timeout=$(($((60*${bundle_percentage}/80 + 20*${sdo_number}/30 + 20*${node_number}/4))/8))
+                agreement_timeout=$(($((50*${bundle_percentage}/80 + 30*${sdo_number}/30 + 20*${node_number}/4))/10))
                 weak_agreement_timeout=$((${agreement_timeout}*2))
                 sed -i "3s/.*/    AGREEMENT_TIMEOUT = ${agreement_timeout}/" config/configuration.py
                 sed -i "4s/.*/    WEAK_AGREEMENT_TIMEOUT = ${weak_agreement_timeout}/" config/configuration.py
