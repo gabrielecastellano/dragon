@@ -10,6 +10,9 @@ bundle_percentage=40
 agreement_timeout=3
 weak_agreement_timeout=6
 
+rm -r -f validation/
+mkdir validation
+
 sdo_number=3
 sed -i "7s/.*/    SDO_NUMBER = ${sdo_number}/" config/configuration.py
 while [ ${sdo_number} -le 30 ]; do
