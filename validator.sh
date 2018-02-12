@@ -30,6 +30,7 @@ while [ ${sdo_number} -le 30 ]; do
 
             file_name="validation/"${sdo_number}"sdos__"${neighbor_probability}"neighbor_prob__"${node_number}"nodes.txt"
             echo "Output file: "${file_name}
+            echo -e > ${file_name}
             echo ${sdo_number}" sdos, "${neighbor_probability}" neighbor_prob, "${node_number}" nodes " > ${file_name}
 
             bundle_percentage=40
