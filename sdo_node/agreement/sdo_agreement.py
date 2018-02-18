@@ -32,14 +32,15 @@ class SdoAgreement:
         self.rebroadcast = False
         self.agreement = False
         self.updated = False
+        self._pending_rebid = False
 
-    def sdo_agreement(self, received_winners, received_bidding_data, sender, local=False):
+    def sdo_agreement(self, received_winners, received_bidding_data, sender, rebid_enabled=True):
         """
 
         :param received_winners: list of the winners for sender (for each node)
         :param received_bidding_data: contains, for each node, all the last bids known by the sender for each sdo
         :param sender:
-        :param local:
+        :param rebid_enabled:
         :type received_winners: dict[str, set of str]
         :type received_bidding_data: dict[str, dict[str, dict[str, union[int, str]]]]
         :type sender: str
@@ -55,7 +56,7 @@ class SdoAgreement:
         logging.log(LoggingConfiguration.VERBOSE, "Local data: " + pprint.pformat(current_bidding_data))
         logging.log(LoggingConfiguration.VERBOSE, "Received data: " + pprint.pformat(received_bidding_data))
 
-        rebid = False
+        overbid = False
         self.agreement = True
         self.updated = False
         self.rebroadcast = False
@@ -99,7 +100,9 @@ class SdoAgreement:
         '''
             node_winner_list, node_assignment_dict = self.sdo_bidder.auction(node)
         '''
+        logging.info("Computing auction on new data")
         winners, assignment_dict, lost_nodes = self.sdo_bidder.multi_node_auction()
+        logging.info("Auction completed on new data")
 
         self.sdo_bidder.per_node_winners = winners
         # blacklisted_nodes = lost_nodes[self.sdo_name]
@@ -108,13 +111,25 @@ class SdoAgreement:
             logging.log(LoggingConfiguration.IMPORTANT, "Node has been overbidded!!")
             # empty implementations
             self.sdo_bidder.implementations = list()
-            # release the bidding on lost nodes
-            for node in lost_nodes[self.sdo_name]:
-                self.sdo_bidder.bidding_data[node][self.sdo_name] = self.sdo_bidder.init_bid(time.time())
+            self.sdo_bidder.private_utility = 0
+            # release the bidding on each bidded nodes
+            for node in current_bidding_data:
+                if current_bidding_data[node][self.sdo_name] != 0:
+                    self.sdo_bidder.bidding_data[node][self.sdo_name] = self.sdo_bidder.init_bid(time.time())
+            # try to repeat bidding on residual resources
+            # self.sdo_bidder.sdo_bidding()
+            # update & rebroadcast
+            overbid = True
+
+        # if overbid:
+        if rebid_enabled and (overbid or self._pending_rebid):
             # try to repeat bidding on residual resources
             self.sdo_bidder.sdo_bidding()
-            # update & rebroadcast
-            rebid = True
+            self._pending_rebid = False
+        elif overbid:
+            # postpone rebid
+            self._pending_rebid = True
+
         '''
 
             if local:
@@ -152,6 +167,16 @@ class SdoAgreement:
             new_winners_digest = hashlib.sha256(
                 str(sorted(self.sdo_bidder.per_node_winners[node])).encode()).hexdigest()
 
+            current_node_consumption = {r: sum([current_bidding_data[node][s]["consumption"][r]
+                                                for s in self.rap.sdos])
+                                        for r in self.rap.resources}
+            rcvd_node_consumption = {r: sum([received_bidding_data[node][s]["consumption"][r]
+                                             for s in self.rap.sdos])
+                                     for r in self.rap.resources}
+            new_node_consumption = {r: sum([self.sdo_bidder.bidding_data[node][s]["consumption"][r]
+                                            for s in self.rap.sdos])
+                                    for r in self.rap.resources}
+
             # NOTE: in our decision table "UPDATE" means "keep the merge result"
 
             '''
@@ -168,7 +193,7 @@ class SdoAgreement:
             '''
             agreement_on_node = False
 
-            if rebid:
+            if overbid:
                 # update & rebroadcast
                 logging.log(LoggingConfiguration.IMPORTANT, "UPDATE & REBROADCAST")
                 self.rebroadcast = True
@@ -186,16 +211,27 @@ class SdoAgreement:
                 self.updated = True
             elif current_winners_digest == rcvd_winners_digest == new_winners_digest:
                 logging.info("Current winners are equals to received!")
-                agreement_on_node = True
                 if self._compare_bid_times(received_bidding_data[node], current_bidding_data[node]) > 0:
                     # received at least a new bid time
-                    # update & no-rebroadcast
-                    logging.log(LoggingConfiguration.IMPORTANT, "UPDATE & NO-REBROADCAST")
+                    if self.rap.check_equals(current_node_consumption, rcvd_node_consumption)\
+                            and self.rap.check_equals(current_node_consumption, new_node_consumption):
+                        # some new timestamp but no changes in resource assignment
+                        agreement_on_node = True
+                        self.updated = True
+                        logging.log(LoggingConfiguration.IMPORTANT, "UPDATE & NO-REBROADCAST")
+                    else:
+                        # winners remain the same but there is some change on resource assignment
+                        # update & rebroadcast
+                        logging.log(LoggingConfiguration.IMPORTANT, "UPDATE & REBROADCAST")
+                        self.rebroadcast = True
+                        self.updated = True
                 elif self._compare_bid_times(received_bidding_data[node], current_bidding_data[node]) == 0:
                     # leave & no-rebroadcast
+                    agreement_on_node = True
                     logging.log(LoggingConfiguration.IMPORTANT, "LEAVE & NO-REBROADCAST")
                 else:
                     # leave & no-rebroadcast
+                    agreement_on_node = True
                     logging.log(LoggingConfiguration.IMPORTANT, "LEAVE & NO-REBROADCAST")
                     # if self.sdo_name not in self.sdo_bidder.winners[node]:
                     #     # leave & no-rebroadcast
@@ -207,7 +243,8 @@ class SdoAgreement:
             elif rcvd_winners_digest == new_winners_digest:  # winners are same of received
                 # update & rebroadcast
                 logging.log(LoggingConfiguration.IMPORTANT, "UPDATE & REBROADCAST")
-                agreement_on_node = True
+                if self.rap.check_equals(rcvd_node_consumption, current_node_consumption):
+                    agreement_on_node = True
                 self.rebroadcast = True
                 self.updated = True
             elif current_winners_digest == new_winners_digest:  # winners remains the same

@@ -80,6 +80,22 @@ shutil.rmtree(Configuration.RESULTS_FOLDER, ignore_errors=True)
 # NetworkPlotter(rap.sdos).graphical_plot()
 NetworkPlotter(rap.sdos).print_topology()
 
+# print total resources
+total_resources = rap.get_total_resources_amount()
+average_resource_per_function = {r: sum([rap.get_function_resource_consumption(f)[r] for f in rap.functions])/len(rap.functions) for r in rap.resources}
+average_resource_percentage_per_function = sum([average_resource_per_function[r]/total_resources[r] for r in rap.resources])/len(rap.resources)
+statistical_bundle_len = len(rap.services)*(Configuration.BUNDLE_PERCENTAGE/100)
+average_resource_demand = statistical_bundle_len*average_resource_percentage_per_function
+print("- Resources Statistics - ")
+print("Total resources: \n" + pprint.pformat(total_resources))
+print("Average resources per function: \n" + pprint.pformat(average_resource_per_function))
+print("Average demand percentage per function: " + str(round(average_resource_percentage_per_function, 3)))
+print("Statistical bundle len: " + str(round(statistical_bundle_len, 2)))
+print("Statistical average demand percentage per bundle: " + str(round(average_resource_demand, 3)))
+print("Statistical total demand percentage: " + str(round(average_resource_demand*Configuration.SDO_NUMBER, 3)))
+print("- -------------------- - ")
+
+print("- Run Orchestration - ")
 for i in range(Configuration.SDO_NUMBER):
     sdo_name = "sdo" + str(i)
     service_bundle = [s for s in rap.services
@@ -95,8 +111,18 @@ for i in range(Configuration.SDO_NUMBER):
     p_list.append(p)
 
 try:
+    private_utilities = list()
     for p in p_list:
-        p.wait(timeout=200)
+        ret_code = p.wait(timeout=200)
+        if ret_code < 0:
+            ret_code = 0
+        private_utilities.append(ret_code)
+
+    print(" - Collect Results - ")
+    # sum of private utilities
+    print("Sum of private utilities: " + str(sum(private_utilities)))
+
+    # fetch post process information
     placements = dict()
     message_rates = dict()
     for i in range(Configuration.SDO_NUMBER):
@@ -113,15 +139,23 @@ try:
         except FileNotFoundError:
             continue
 
+    # print assignment info
     placement_file = Configuration.RESULTS_FOLDER + "/results.json"
     with open(placement_file, "w") as f:
         f.write(json.dumps(placements, indent=4))
     residual_resources = dict(rap.available_resources)
     for service, function, node in list(itertools.chain(*placements.values())):
         residual_resources[node] = rap.sub_resources(residual_resources[node], rap.consumption[function])
+    total_residual_resources = {r: sum([residual_resources[n][r] for n in rap.nodes]) for r in rap.resources}
+    total_residual_resources_percentage = sum([total_residual_resources[r]/total_resources[r] for r in rap.resources])/len(rap.resources)
+    used_resources_percentage = 1 - total_residual_resources_percentage
     print("Allocation: \n" + pprint.pformat(placements))
     print("Residual resources: \n" + pprint.pformat(residual_resources))
+    print("Percentage of assigned resources: " + str(round(used_resources_percentage, 3)))
+    print("Percentage of successfully allocated bundles: " + str(round(len([u for u in private_utilities
+                                                                            if u > 0]), 3)/Configuration.SDO_NUMBER))
 
+    # calculate message rates
     begin_time = min([float(next(iter(message_rates[sdo])).split(":")[0]) for sdo in message_rates])
     next_begin_time = begin_time
     global_rates = OrderedDict()
@@ -143,6 +177,7 @@ try:
         global_rates[float("{0:.3f}".format(next_end_time-begin_time))] = in_range_counter/(next_end_time-next_begin_time)
         next_begin_time = next_end_time
 
+    # print message rates
     print("Message rates: \n" + pprint.pformat(global_rates))
 
 except TimeoutExpired:

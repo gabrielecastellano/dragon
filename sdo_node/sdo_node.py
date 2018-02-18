@@ -54,6 +54,7 @@ class SDONode:
         self.message_queues = {sdo: list() for sdo in self.neighborhood}
         self.queue_locks = {sdo: Lock() for sdo in self.neighborhood}
         self.cv = Condition()
+        self.pending_rebroadcast = False
 
         # validation
         self.sent_count = 0
@@ -99,9 +100,11 @@ class SDONode:
             logging.info(" - Assigned functions are: \n" + pprint.pformat(self.sdo_bidder.implementations))
         else:
             logging.info(" - Sdo '" + self.sdo_name + " didn't get enough resources to implement bundle :-(")
-        print(self.sdo_name +
+        print(self.sdo_name.ljust(5) +
               " | strong: " + str(strong_agreement).ljust(5) +
               " | winners: " + str(sorted(self.sdo_bidder.get_winners())) +
+              " | U: " + str(int(self.sdo_bidder.global_utility_function())) +
+              " | u: " + str(self.sdo_bidder.private_utility).rjust(3) +
               " | last update on: " + str(self.last_update_time - self.begin_time)[:5] +
               " | agreement on: " + str(self.agreement_time - self.begin_time)[:5] +
               " | last message on: " + str(self.last_message_time - self.begin_time)[:5] +
@@ -174,11 +177,20 @@ class SDONode:
         # [ agreement process for this message ]
         logging.log(LoggingConfiguration.IMPORTANT, "Handling message from '" + message.sender + "'" +
                     " - ts: " + datetime.fromtimestamp(message.timestamp).strftime('%d/%m/%Y %H:%M:%S.%f')[:-3])
-        self.sdo_agreement.sdo_agreement(message.winners, message.bidding_data, message.sender)
+        # TODO IMPROVEMENT: if there are other messages in any queue, we can speedup agreement postponing rebid if any
+        empty_queues = len(list(itertools.chain(*self.message_queues.values()))) == 0
+        self.sdo_agreement.sdo_agreement(message.winners, message.bidding_data, message.sender, rebid_enabled=True)
 
         # [ rebroadcast ]
-        if self.sdo_agreement.rebroadcast:
+        # TODO IMPROVEMENT: if there are other messages in any queue, process them before to rebroadcast
+        # to do this we can set an other rebroadcast flag on this class instead of rebroadcasting, that is checked
+        # any time the queues are empty (if is set, rebroadcast and then reset).
+        if self.sdo_agreement.rebroadcast or self.pending_rebroadcast:
+            # if len(list(itertools.chain(*self.message_queues.values()))) != 0:
+            #     self.pending_rebroadcast = True
+            # else:
             self.broadcast()
+            #    self.pending_rebroadcast = False
         else:
             logging.info("No need to rebroadcast bidding information.")
 

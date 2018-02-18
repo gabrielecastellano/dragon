@@ -10,8 +10,10 @@ import itertools
 
 import sys
 
+from config.configuration import Configuration
+from config.logging_configuration import LoggingConfiguration
 from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
-from sdo_node.bidding.exceptions import NoFunctionsLeft
+from sdo_node.bidding.exceptions import NoFunctionsLeft, SchedulingTimeout
 
 
 class SdoBidder:
@@ -51,6 +53,9 @@ class SdoBidder:
         self.implementations = list()
         """ If node is a winner, contains all the won implementation for each service of its bundle """
 
+        self.private_utility = 0
+        """ Stores the value of the private utility function for the current assignment """
+
     def multi_node_auction(self, blacklisted_sdos=set()):
         """
 
@@ -59,7 +64,7 @@ class SdoBidder:
         """
 
         logging.info("****** Start Auction ******")
-        logging.debug(": blacklisted sdos: " + str(blacklisted_sdos))
+        logging.log(LoggingConfiguration.VERBOSE, ": blacklisted sdos: " + str(blacklisted_sdos))
         winners = {node: set() for node in self.rap.nodes}
         lost_nodes = {sdo: set() for sdo in self.rap.sdos}
         bidded_nodes = {sdo: set() for sdo in self.rap.sdos}
@@ -216,6 +221,9 @@ class SdoBidder:
                 # skip if is already a winner
                 if sdo in node_winners or 'bid' not in self.bidding_data[node][sdo]:
                     continue
+                # skip if bid is 0
+                if self.bidding_data[node][sdo]['bid'] == 0:
+                    continue
                 # get total bid for this sdo
                 sdo_bid = self.bidding_data[node][sdo]['bid']
                 logging.debug(" --- candidate: '" + sdo + "' | bid: '" + str(sdo_bid) + "'")
@@ -259,12 +267,18 @@ class SdoBidder:
         blacklisted_nodes = set()
         desired_implementation = list()
         self.implementations = list()
+        self.private_utility = 0
         # try to get the best greedy bundle stopping if sdo lost auction in all the nodes
-        winners_set = self.get_winners(winners)
+        desired_bid_bundle = None
+        winners_set = set()
         while self.sdo_name not in winners_set and len(blacklisted_nodes) < len(self.rap.nodes):
             logging.info("Search for desired bundle ...")
             logging.info("Blacklisting nodes " + str(blacklisted_nodes))
-            desired_bid_bundle = self._greedy_bid(self.rap.available_resources, blacklisted_nodes)
+            try:
+                desired_bid_bundle = self._greedy_bid(self.rap.available_resources, blacklisted_nodes)
+            except SchedulingTimeout as ste:
+                logging.info("Scheduling Timeout: " + ste.message)
+                desired_bid_bundle = None
             logging.info("Desired bundle: " + pprint.pformat(desired_bid_bundle))
             if desired_bid_bundle is None:
                 # release biddings
@@ -297,6 +311,7 @@ class SdoBidder:
             # we found the new bids for this sdo
             logging.info(" --- Sdo is a strong winner!!!")
             self.implementations = desired_implementation
+            self.private_utility = self._private_utility_from_bid_bundle(desired_bid_bundle)
         else:
             # 3. If not, repeat bid but just into the residual capacity
             logging.info(" --- Sdo lost auction, checking for a less expensive solution ...")
@@ -307,6 +322,13 @@ class SdoBidder:
                     self.per_node_last_bids[node] = self.bidding_data[node][self.sdo_name]['bid']
                     # remove from winners
                     self.per_node_winners[node].discard(self.sdo_name)
+                #else:
+                #    # set a limit lower than the current lowest one to avoid over-rebid
+                #    self.per_node_last_bids[node] = min([self.bidding_data[node][s]['bid']
+                #                                         for s in self.rap.sdos
+                #                                         if self.bidding_data[node][s]['bid'] > 0] +
+                #                                        [self.per_node_last_bids[node]])
+
                 # reset bid
                 self.bidding_data[node][self.sdo_name] = self.init_bid(time.time())
 
@@ -314,7 +336,11 @@ class SdoBidder:
             residual_resources = self.rap.get_residual_resources(assignment_dict)
             logging.info(" ----- Residual resources: " + pprint.pformat(residual_resources))
             logging.info("Search for lighter bundle ...")
-            lighter_bid_bundle = self._greedy_bid(residual_resources)
+            try:
+                lighter_bid_bundle = self._patience_bid(residual_resources)
+            except SchedulingTimeout as ste:
+                logging.info("Scheduling Timeout: " + ste.message)
+                lighter_bid_bundle = None
             logging.info("Lighter bundle: " + pprint.pformat(lighter_bid_bundle))
             if lighter_bid_bundle is None:
                 logging.info(" ----- There are no solutions fitting the remaining space.")
@@ -326,6 +352,7 @@ class SdoBidder:
                     self.bidding_data[node][self.sdo_name] = assignment[node][self.sdo_name]
                     self.per_node_winners[node].add(self.sdo_name)
                 self.implementations = lighter_implementation
+                self.private_utility = self._private_utility_from_bid_bundle(lighter_bid_bundle)
         # set the limits for future rebidding
         if self.sdo_name in self.get_winners():
             for node in self.bidding_data:
@@ -344,6 +371,7 @@ class SdoBidder:
         :param set of str blacklisted_nodes: those nodes will not be taken in account
         :return dict[str, dict[str, union[str, int]]]: the best optimization bid_bundle found
         """
+        begin_ts = time.time()
         current_bid_bundle = dict()
         """ { service_name: { function: function_name, node: node_name, utility: utility_value } } """
         current_utility = 0
@@ -383,6 +411,9 @@ class SdoBidder:
                     logging.debug(" ----- Exceeded capacity, looking for an other one ...")
                     del current_bid_bundle[s]
                     skip_vector[len(current_bid_bundle)] += 1
+                    # check timeout
+                    if time.time() > begin_ts + Configuration.SCHEDULING_TIME_LIMIT:
+                        raise SchedulingTimeout("Scheduling took to long, aborted")
                 else:
                     # update utility and go next iteration
                     logging.debug(" ----- Bounded, added to bundle.")
@@ -399,20 +430,118 @@ class SdoBidder:
                 del current_bid_bundle[added_services[-1]]
                 added_services = added_services[:-1]
                 skip_vector[len(current_bid_bundle)] += 1
+
         # round utilities
         current_bid_bundle = {k: {'function': v['function'], 'node': v['node'], 'utility': int(round(v['utility']))}
                               for k, v in current_bid_bundle.items()}
         return current_bid_bundle
 
-    def _greedy_bid_bottom(self, resource_bound):
+    def _patience_bid(self, resource_bound, blacklisted_nodes=set()):
         """
-        Find the greedy-best solution fitting the given resources.
-        This algorithm starts from a lower bound solution and try to substitute function one-by-one
+        Find the patience-best solution fitting the given resources.
+        Patience algorithm starts from a lower bound solution and try to substitute function one-by-one
         in order to increase the utility without exceeding the resources.
-        :param resource_bound: resources that the solution must fit
-        :return: the best optimization bundle found
+        :param dict[str, dict[str, int]] resource_bound: for each node, resources that the solution must fit
+        :param set of str blacklisted_nodes: those nodes will not be taken in account
+        :return dict[str, dict[str, union[str, int]]]: the best optimization bid_bundle found
         """
-        pass
+        begin_ts = time.time()
+        current_bid_bundle = dict()
+        """ { service_name: { function: function_name, node: node_name, utility: utility_value } } """
+        current_utility = 0
+        skip_vector = [0]*len(self.service_bundle)
+        added_services = list()
+        consumption_iterator = {s: 0 for s in self.service_bundle}
+        while len(current_bid_bundle) < len(self.service_bundle):
+            logging.debug(" - Current bundle: " + pprint.pformat(current_bid_bundle, compact=True))
+            logging.debug(" - Skip vector: " + pprint.pformat(skip_vector, compact=True))
+            logging.debug(" - Searching for service to add at index: " + str(len(current_bid_bundle)))
+            # exclude nodes where bid is completed
+            completed_bid_nodes = self._get_completed_bid_nodes(current_bid_bundle)
+            # get the best greedy
+            s, f, n, mu = self._get_next_lighter_service(current_bid_bundle,
+                                                         consumption_iterator,
+                                                         {s for s in current_bid_bundle},
+                                                         set.union(blacklisted_nodes, completed_bid_nodes),
+                                                         resource_bound=resource_bound)
+            logging.debug(" --- Found the next " + str(skip_vector[len(current_bid_bundle)]+1) +
+                          "-lighter service: '" + s +
+                          "' with function '" + f +
+                          "' on node '" + n +
+                          "' giving marginal utility " + str(mu))
+            # add to current bundle
+            current_bid_bundle[s] = {"function": f, "node": n, "utility": mu}
+            current_implementations = [(serv,
+                                        current_bid_bundle[serv]["function"],
+                                        current_bid_bundle[serv]["node"],
+                                        current_bid_bundle[serv]["utility"])
+                                       for serv in sorted(current_bid_bundle,
+                                                          key=lambda x: current_bid_bundle[x]["utility"],
+                                                          reverse=True)]
+            logging.debug(" --- Current bundle = " + str(current_implementations))
+            # check if the total is bounded
+            assignments = self._build_assignment_from_bid_bundle(current_bid_bundle)
+            if not self.rap.check_custom_bound(assignments, resource_bound):
+                # if not, there are no feasible solution
+                logging.debug(" ----- Exceeded capacity, no feasible assignment found ...")
+                return None
+            else:
+                # update utility and go next iteration
+                logging.debug(" ----- Bounded, added to bundle.")
+                added_services.append(s)
+                current_utility += mu
+
+        logging.debug(" - lightest bundle found, trying to improve it.")
+        not_improvable_services = set()
+        consumption_iterator = {s: self._get_function_average_consumption(current_bid_bundle[s]["function"],
+                                                                          node=current_bid_bundle[s]["node"],
+                                                                          resources=resource_bound)
+                                for s in current_bid_bundle}
+        while len(not_improvable_services) < len(current_bid_bundle):
+            # exclude nodes where bid is completed
+            # improvable_services = {s for s in current_bid_bundle if s not in not_improvable_services}
+            completed_bid_nodes = self._get_completed_bid_nodes(current_bid_bundle,
+                                                                to_consider_services=not_improvable_services)
+            s, f, n, mu = self._get_next_lighter_service(current_bid_bundle,
+                                                         consumption_iterator,
+                                                         not_improvable_services,
+                                                         set.union(blacklisted_nodes, completed_bid_nodes),
+                                                         resource_bound=resource_bound)
+            if s is None:
+                # nothing better found
+                break
+            consumption_iterator[s] = self._get_function_average_consumption(f, node=n, resources=resource_bound)
+            if mu > current_bid_bundle[s]["utility"]:
+                old_impl = dict(current_bid_bundle[s])
+                current_bid_bundle[s] = {"function": f, "node": n, "utility": mu}
+
+                # check if the total is bounded
+                assignments = self._build_assignment_from_bid_bundle(current_bid_bundle)
+                if not self.rap.check_custom_bound(assignments, resource_bound):
+                    # if not, go back to last bundle
+                    logging.debug(" ----- Exceeded capacity, this service cannot be improved ...")
+                    current_bid_bundle[s] = old_impl
+                    not_improvable_services.add(s)
+                else:
+                    # update utility and go next iteration
+                    logging.debug(" ----- Bounded, added to bundle.")
+                    current_implementations = [(serv,
+                                                current_bid_bundle[serv]["function"],
+                                                current_bid_bundle[serv]["node"],
+                                                current_bid_bundle[serv]["utility"])
+                                               for serv in sorted(current_bid_bundle,
+                                                                  key=lambda x: current_bid_bundle[x]["utility"],
+                                                                  reverse=True)]
+                    logging.debug(" --- Current bundle = " + str(current_implementations))
+                    added_services.append(s)
+                    current_utility += mu
+                    if time.time() > begin_ts + Configuration.SCHEDULING_TIME_LIMIT:
+                        break
+
+        # round utilities
+        current_bid_bundle = {k: {'function': v['function'], 'node': v['node'], 'utility': int(round(v['utility']))}
+                              for k, v in current_bid_bundle.items()}
+        return current_bid_bundle
 
     def _get_next_best_service(self, bid_bundle, skip_first=0, blacklisted_nodes=set()):
         """
@@ -437,6 +566,34 @@ class SdoBidder:
         marginal_utility, (best_service, best_function, best_node) = sorted(utility_dict.items(),
                                                                             reverse=True)[skip_first]
         return best_service, best_function, best_node, marginal_utility
+
+    def _get_next_lighter_service(self, bid_bundle, consumptions_iterator, skip_services=set(),
+                                  blacklisted_nodes=set(), resource_bound=None):
+        """
+
+        :param bid_bundle:
+        :param skip_services:
+        :param blacklisted_nodes:
+        :param resource_bound:
+        :return:
+        """
+
+        lighter_function = (None, None, None, None)
+        lighter_consumption = sys.maxsize
+
+        for service in self.service_bundle:
+            if service not in skip_services:
+                free_bid_bundle = {s: bid_bundle[s] for s in bid_bundle if s != service}
+                for function in self.rap.get_implementations_for_service(service.split('_', 1)[-1]):
+                    for node in [node for node in self.rap.nodes if node not in blacklisted_nodes]:
+                        function_average_consumption = self._get_function_average_consumption(function,
+                                                                                              node=node,
+                                                                                              resources=resource_bound)
+                        if lighter_consumption > function_average_consumption > consumptions_iterator[service]:
+                            lighter_consumption = function_average_consumption
+                            marginal_utility = self._marginal_utility(free_bid_bundle, service, function, node)
+                            lighter_function = (service, function, node, marginal_utility)
+        return lighter_function
 
     # Not used
     def _get_best_function_for_service(self, bid_bundle, service):
@@ -478,8 +635,7 @@ class SdoBidder:
         for function in self.rap.get_implementations_for_service(service.split('_', 1)[-1]):
             for node in [node for node in self.rap.nodes if node not in blacklisted_nodes]:
                 marginal_utility = self._marginal_utility(bid_bundle, service, function, node)
-                if int(round(marginal_utility)) <= self.per_node_last_bids[node]:
-                    ranked_functions[(function, node)] = marginal_utility
+                ranked_functions[(function, node)] = marginal_utility
         return ranked_functions
 
     def _marginal_utility(self, bid_bundle, service, function, node):
@@ -609,8 +765,6 @@ class SdoBidder:
                       " ... taken services " + str(taken_services) + " ... \n" +
                       " ... and functions " + str(taken_functions) + " ... \n" +
                       " ... is: " + str(utility))
-        if self.sdo_name == 'sdo1' and utility == 0:
-            print(node)
         # exceptional case! (python3 would round at 0)
         if utility < 0.5:
             utility = 0.51
@@ -685,20 +839,35 @@ class SdoBidder:
         """
         return float('%.5f' % (a + ((k - a) / (c + q * math.exp(1) ** (-b * x)) ** (1 / v))))
 
-    def _get_function_average_consumption(self, function):
+    def _get_function_average_consumption(self, function, node=None, resources=None):
         """
 
         :param function:
         :return: decimal average consumption
         """
         consumption_percentages = list()
-        total_resources_amount = self.rap.get_total_resources_amount()
+
+        if node is None and resources is None:
+            total_resources_amount = self.rap.get_total_resources_amount()
+            nodes_number = len(self.rap.nodes)
+        elif node is not None and resources is None:
+            total_resources_amount = self.rap.available_resources[node]
+            nodes_number = 1
+        elif node is None and resources is not None:
+            total_resources_amount = {r: sum([resources[n][r] for n in self.rap.nodes]) for r in self.rap.resources}
+            nodes_number = len(self.rap.nodes)
+        else:
+            total_resources_amount = resources[node]
+            nodes_number = 1
+
         average_node_resources = {}
         for resource in self.rap.resources:
-            average_node_resources[resource] = total_resources_amount[resource]/len(self.rap.nodes)
+            average_node_resources[resource] = total_resources_amount[resource]/nodes_number
         for resource in self.rap.resources:
             consumption = self.rap.get_function_resource_consumption(function)[resource]
             total = average_node_resources[resource]
+            if total == 0:
+                return sys.maxsize
             consumption_percentages.append(consumption / total)
 
         av_decimal_consumption = sum(consumption_percentages) / float(len(consumption_percentages))
@@ -713,15 +882,14 @@ class SdoBidder:
         assignments = dict()
         ts = time.time()
         for node in set([bid_bundle[s]['node'] for s in bid_bundle]):
-            # average
-            # overall_node_utility = int(sum([bid_bundle[s]['utility']
-            #                           for s in bid_bundle if bid_bundle[s]['node'] == node])/len(bid_bundle))
-            # max
-            overall_node_utility = max([bid_bundle[s]['utility'] for s in bid_bundle if bid_bundle[s]['node'] == node])
+            private_node_utility = self._private_node_utility_from_bid_bundle(bid_bundle, node)
             overall_node_consumption = self.rap.get_bundle_resource_consumption([bid_bundle[s]['function']
                                                                                  for s in bid_bundle
                                                                                  if bid_bundle[s]['node'] == node])
-            node_assignment = {'bid': overall_node_utility, 'consumption': overall_node_consumption, 'timestamp': ts}
+            node_bid = round(private_node_utility/self.rap.weighted_quadratic_norm(node, overall_node_consumption))
+            node_assignment = {'bid': min(node_bid, self.per_node_last_bids[node]),
+                               'consumption': overall_node_consumption,
+                               'timestamp': ts}
             assignments[node] = {self.sdo_name: node_assignment}
         return assignments
 
@@ -734,6 +902,34 @@ class SdoBidder:
         """
         return sorted([(s, bid_bundle[s]['function'], bid_bundle[s]['node'])
                        for s in bid_bundle], key=lambda x: x[0])
+
+    @staticmethod
+    def _private_node_utility_from_bid_bundle(bid_bundle, node):
+        """
+
+        :param dict[str, union[str, int]]] bid_bundle:
+        :return:
+        """
+        if node in set([bid_bundle[s]['node'] for s in bid_bundle]):
+            services_in_node = [s for s in bid_bundle if bid_bundle[s]['node'] == node]
+            # average
+            # return round(sum([bid_bundle[s]['utility'] for s in services_in_node])/len(services_in_node))
+            # max
+            # return max([bid_bundle[s]['utility'] for s in services_in_node])
+            # sum
+            return sum([bid_bundle[s]['utility'] for s in services_in_node])
+        else:
+            return 0
+
+    @staticmethod
+    def _private_utility_from_bid_bundle(bid_bundle):
+        """
+
+        :param dict[str, union[str, int]]] bid_bundle:
+        :return:
+        """
+        return sum([SdoBidder._private_node_utility_from_bid_bundle(bid_bundle, node)
+                    for node in set([bid_bundle[s]['node'] for s in bid_bundle])])
 
     def init_bid(self, timestamp=0):
         """
@@ -752,16 +948,19 @@ class SdoBidder:
         return [node for node in self.rap.nodes if self.bidding_data[node][sdo]['bid'] != 0]
 
     @staticmethod
-    def _get_completed_bid_nodes(bid_bundle):
+    def _get_completed_bid_nodes(bid_bundle, to_consider_services=None):
         """
         Searches and returns nodes already used, except the last one. The last one is the only used node where the sdo
         can still add some function to modify the bid value.
         :param bid_bundle:
+        :param to_consider_services: consider just nodes with those services
         :return set of str: the set of node where sdo cannot modify its bid
         """
-
+        if to_consider_services is None:
+            to_consider_services = {s for s in bid_bundle}
         used_nodes = [bid_bundle[s]['node']
-                      for s in sorted(bid_bundle, key=lambda s: bid_bundle[s]['utility'], reverse=True)]
+                      for s in sorted(bid_bundle, key=lambda s: bid_bundle[s]['utility'], reverse=True)
+                      if s in to_consider_services]
         if len(used_nodes) > 0:
             last_used_node = used_nodes[-1]
             used_nodes = set(used_nodes)
@@ -778,3 +977,10 @@ class SdoBidder:
             return set(itertools.chain(*winners_dict.values()))
         else:
             return set(itertools.chain(*self.per_node_winners.values()))
+
+    def global_utility_function(self):
+        """
+
+        :return:
+        """
+        return sum([self.bidding_data[n][sdo]['bid'] for sdo in self.rap.sdos for n in self.rap.nodes])

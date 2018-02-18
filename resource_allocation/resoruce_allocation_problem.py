@@ -1,5 +1,7 @@
 import pprint
 
+import math
+
 
 class ResourceAllocationProblem:
 
@@ -224,6 +226,18 @@ class ResourceAllocationProblem:
             sub_resources[resource] = resources_a[resource] - resources_b[resource]
         return sub_resources
 
+    def check_equals(self, resources_a, resources_b):
+        """
+
+        :param resources_a:
+        :param resources_b:
+        :return:
+        """
+        for resource in self.resources:
+            if resources_a[resource] != resources_b[resource]:
+                return False
+        return True
+
     @staticmethod
     def get_sdo_utility_node_assignment(assignment_dict, sdo):
         """
@@ -287,6 +301,22 @@ class ResourceAllocationProblem:
         :return:
         """
         return self.implementation[service]
+
+    def weighted_quadratic_norm(self, node, resources):
+        """
+
+        :param node:
+        :param resources:
+        :return:
+        """
+        quadratic_weights = list()
+        for resource in self.resources:
+            weighted_consumption = resources[resource]/self.available_resources[node][resource]
+            quadratic_weight = weighted_consumption**2
+            quadratic_weights.append(quadratic_weight)
+
+        weighted_quadratic_norm = math.sqrt(sum(quadratic_weights))
+        return weighted_quadratic_norm
 
     def __str__(self):
         return "************************* RAP INSTANCE ************************\n" + "sdos: " + str(self.sdos) + "\n " \

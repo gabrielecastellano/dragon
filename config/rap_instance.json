@@ -7,14 +7,7 @@
         "sdo4",
         "sdo5",
         "sdo6",
-        "sdo7",
-        "sdo8",
-        "sdo9",
-        "sdo10",
-        "sdo11",
-        "sdo12",
-        "sdo13",
-        "sdo14"
+        "sdo7"
     ],
     "functions": [
         "f1",
@@ -95,23 +88,23 @@
     },
     "available_resources": {
         "node0": {
-            "cpu": 12,
-            "memory": 8192,
-            "bandwidth": 4096
-        },
-        "node1": {
             "cpu": 16,
             "memory": 4096,
             "bandwidth": 2048
         },
+        "node1": {
+            "cpu": 12,
+            "memory": 4096,
+            "bandwidth": 2048
+        },
         "node2": {
-            "cpu": 8,
+            "cpu": 12,
             "memory": 8192,
             "bandwidth": 4096
         },
         "node3": {
             "cpu": 4,
-            "memory": 4096,
+            "memory": 2048,
             "bandwidth": 1024
         }
     },

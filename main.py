@@ -94,3 +94,6 @@ if __name__ == "__main__":
     rates_filename = Configuration.RESULTS_FOLDER + "/rates_" + SDO_NAME + ".json"
     with open(rates_filename, "w") as f:
         f.write(json.dumps(list(rates.items()), indent=4))
+
+    exit(sdo_node.sdo_bidder.private_utility)
+
