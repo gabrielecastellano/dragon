@@ -464,6 +464,9 @@ class SdoBidder:
                                                          {s for s in current_bid_bundle},
                                                          set.union(blacklisted_nodes, completed_bid_nodes),
                                                          resource_bound=resource_bound)
+            if s is None:
+                # building of bid_bundle is not possible
+                return None
             logging.debug(" --- Found the next " + str(skip_vector[len(current_bid_bundle)]+1) +
                           "-lighter service: '" + s +
                           "' with function '" + f +
