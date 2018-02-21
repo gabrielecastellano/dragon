@@ -915,7 +915,6 @@ class SdoBidder:
             node_bid = private_node_utility  # global policy is to maximize private utilities
             if node_bid/demand_norm > self.per_node_max_bid_ratio[n]:
                 node_bid = int(demand_norm*self.per_node_max_bid_ratio[n])
-            print(private_node_utility)
             node_assignment = {'bid': node_bid,
                                'consumption': overall_node_consumption,
                                'timestamp': ts}
