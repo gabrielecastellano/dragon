@@ -6,7 +6,7 @@ class Configuration:
     STABLE_CONNECTIONS = True
     SDO_NUMBER = 8  # 12
     MAX_NEIGHBORS_RATIO = 1/3
-    NEIGHBOR_PROBABILITY = 62  # 55
+    NEIGHBOR_PROBABILITY = 68  # 55
 
     NODE_NUMBER = 4
     BUNDLE_PERCENTAGE = 55  # 70
@@ -15,7 +15,7 @@ class Configuration:
 
     SCHEDULING_TIME_LIMIT = 1
 
-    LOG_LEVEL = "VERBOSE"
+    LOG_LEVEL = "WARNING"
 
     RAP_INSTANCE = "config/rap_instance.json"
     RESULTS_FOLDER = "results"

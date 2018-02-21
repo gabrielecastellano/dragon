@@ -47,8 +47,8 @@ class SdoBidder:
         self.per_node_winners = {node: set() for node in self.rap.nodes}
         """ Winners sdos computed at the last iteration for each node """
 
-        self.per_node_last_bids = {node: sys.maxsize for node in self.rap.nodes}
-        """ Last bids placed for each nodes. Cannot be exceeded during each rebidding """
+        self.per_node_max_bid_ratio = {node: sys.maxsize for node in self.rap.nodes}
+        """ Last bids/demand placed for each nodes. Cannot be exceeded during each rebidding """
 
         self.implementations = list()
         """ If node is a winner, contains all the won implementation for each service of its bundle """
@@ -210,8 +210,8 @@ class SdoBidder:
         logging.info("Bidding data: " + pprint.pformat(self.bidding_data[node], compact=True))
         while True:
             logging.debug(" - Search for best bidder to add ...")
-            higher_bid = 0
-            higher_bidder = None
+            best_bid_demand_ratio = 0
+            best_bidder = None
 
             # look for the highest one
             for sdo in sorted(self.bidding_data[node], key=lambda x: x):
@@ -226,23 +226,25 @@ class SdoBidder:
                     continue
                 # get total bid for this sdo
                 sdo_bid = self.bidding_data[node][sdo]['bid']
+                sdo_demand = self.bidding_data[node][sdo]['consumption']
                 logging.debug(" --- candidate: '" + sdo + "' | bid: '" + str(sdo_bid) + "'")
                 # check if is the higher so far
-                if sdo_bid > higher_bid:
+                sdo_ratio = sdo_bid/self.rap.norm(node, sdo_demand)
+                if sdo_ratio > best_bid_demand_ratio:
                     logging.debug(" ----- is the best so far ...")
                     # check if solution would be infrastructure-bounded
                     if self.rap.check_custom_node_bound({sdo: self.bidding_data[node][sdo]}, node_residual_resources):
                         logging.debug(" ----- is feasible: update best sdo.")
-                        higher_bid = sdo_bid
-                        higher_bidder = sdo
+                        best_bidder = sdo
+                        best_bid_demand_ratio = sdo_ratio
 
             # check if we found one
-            if higher_bid != 0:
+            if best_bidder is not None:
                 # add the bidder to the winner list
-                logging.debug(" - WINNER: '" + higher_bidder + "' | BID: '" + str(higher_bid) + "'")
-                node_assignment_dict[higher_bidder] = self.bidding_data[node][higher_bidder]
-                node_winners.add(higher_bidder)
-                allocated_resources = node_assignment_dict[higher_bidder]["consumption"]
+                logging.debug(" - WINNER: '" + best_bidder + "' | BID_RATIO: '" + str(best_bid_demand_ratio) + "'")
+                node_assignment_dict[best_bidder] = self.bidding_data[node][best_bidder]
+                node_winners.add(best_bidder)
+                allocated_resources = node_assignment_dict[best_bidder]["consumption"]
                 node_residual_resources = self.rap.sub_resources(node_residual_resources, allocated_resources)
             else:
                 # greedy process has finished
@@ -297,7 +299,10 @@ class SdoBidder:
             logging.info(" - checking if desired bundle would win ...")
             for node in assignment:
                 self.bidding_data[node][self.sdo_name] = assignment[node][self.sdo_name]
+            # compute auction
             winners, assignment_dict, lost_nodes = self.multi_node_auction()
+            # set new bid ratio bound
+            self._update_bid_ratio_bound(winners, lost_nodes)
             self.per_node_winners = winners
             blacklisted_nodes.update(lost_nodes[self.sdo_name])
             # release the bidding on lost nodes
@@ -318,8 +323,6 @@ class SdoBidder:
 
             for node in self.rap.nodes:
                 if self.sdo_name in self.per_node_winners[node]:
-                    # set the limits for future rebidding
-                    self.per_node_last_bids[node] = self.bidding_data[node][self.sdo_name]['bid']
                     # remove from winners
                     self.per_node_winners[node].discard(self.sdo_name)
                 #else:
@@ -358,11 +361,31 @@ class SdoBidder:
             for node in self.bidding_data:
                 # TODO il prossimo if va fatto con i nodi con bid non zero invece di così? (cambia?)
                 if self.sdo_name in self.per_node_winners[node]:
-                    self.per_node_last_bids[node] = self.bidding_data[node][self.sdo_name]['bid']
+                    self.per_node_max_bid_ratio[node] = self.bidding_data[node][self.sdo_name]['bid'] / self.rap.norm(
+                                                            node, self.bidding_data[node][self.sdo_name]['consumption'])
 
         logging.info("Sdo final bidding: " + pprint.pformat({node: self.bidding_data[node][self.sdo_name]
                                                              for node in self.rap.nodes}))
         logging.info("------------ End of bid process -------------")
+
+    def _update_bid_ratio_bound(self, winners, lost_nodes):
+        """
+        bound future bids on each node
+        :param winners:
+        :param lost_nodes:
+        :return:
+        """
+        for node in self.rap.nodes:
+            if len(winners[node]) > 0 and (self.sdo_name in winners[node] or node in lost_nodes[self.sdo_name]
+                                          or self.per_node_max_bid_ratio[node] != sys.maxsize):
+                min_bid_ratio = min([self.bidding_data[node][w]['bid']/self.rap.norm(
+                                                                        node, self.bidding_data[node][w]['consumption'])
+                                     for w in winners[node]])
+                if self.sdo_name not in winners[node] or \
+                        min_bid_ratio < self.bidding_data[node][self.sdo_name]['bid']/self.rap.norm(
+                                                        node, self.bidding_data[node][self.sdo_name]['consumption']):
+                    min_bid_ratio -= sys.float_info.epsilon
+                self.per_node_max_bid_ratio[node] = min(self.per_node_max_bid_ratio[node], min_bid_ratio)
 
     def _greedy_bid(self, resource_bound, blacklisted_nodes=set()):
         """
@@ -672,7 +695,7 @@ class SdoBidder:
         logging.debug(" - Getting utility for function '" + function + "' on service '" + service + "'")
 
         # put a placeholder element just to avoid zip() complain
-        bid_bundle['.'] = {'function': '.', 'utility': 101}
+        bid_bundle['.'] = {'function': '.', 'utility': sys.maxsize}
         # create two lists of services and functions that are in the bundle, temporally ordered (decreasing utility)
         taken_services, taken_functions = zip(*sorted([(k, v['function']) for k, v in bid_bundle.items()],
                                                       key=lambda x: bid_bundle[x[0]]['utility'],
@@ -768,9 +791,8 @@ class SdoBidder:
                       " ... taken services " + str(taken_services) + " ... \n" +
                       " ... and functions " + str(taken_functions) + " ... \n" +
                       " ... is: " + str(utility))
-        # exceptional case! (python3 would round at 0)
-        if utility < 0.5:
-            utility = 0.51
+        if utility < 5:
+            utility = 5
         return utility
 
     def _get_transformation(self, services, functions):
@@ -884,16 +906,20 @@ class SdoBidder:
         """
         assignments = dict()
         ts = time.time()
-        for node in set([bid_bundle[s]['node'] for s in bid_bundle]):
-            private_node_utility = self._private_node_utility_from_bid_bundle(bid_bundle, node)
+        for n in set([bid_bundle[s]['node'] for s in bid_bundle]):
+            private_node_utility = self._private_node_utility_from_bid_bundle(bid_bundle, n)
             overall_node_consumption = self.rap.get_bundle_resource_consumption([bid_bundle[s]['function']
                                                                                  for s in bid_bundle
-                                                                                 if bid_bundle[s]['node'] == node])
-            node_bid = round(private_node_utility/self.rap.weighted_quadratic_norm(node, overall_node_consumption))
-            node_assignment = {'bid': min(node_bid, self.per_node_last_bids[node]),
+                                                                                 if bid_bundle[s]['node'] == n])
+            demand_norm = self.rap.norm(n, overall_node_consumption)
+            node_bid = private_node_utility  # global policy is to maximize private utilities
+            if node_bid/demand_norm > self.per_node_max_bid_ratio[n]:
+                node_bid = int(demand_norm*self.per_node_max_bid_ratio[n])
+            print(private_node_utility)
+            node_assignment = {'bid': node_bid,
                                'consumption': overall_node_consumption,
                                'timestamp': ts}
-            assignments[node] = {self.sdo_name: node_assignment}
+            assignments[n] = {self.sdo_name: node_assignment}
         return assignments
 
     @staticmethod
@@ -981,7 +1007,7 @@ class SdoBidder:
         else:
             return set(itertools.chain(*self.per_node_winners.values()))
 
-    def global_utility_function(self):
+    def sum_bids(self):
         """
 
         :return:

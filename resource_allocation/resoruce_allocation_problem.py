@@ -2,6 +2,8 @@ import pprint
 
 import math
 
+import sys
+
 
 class ResourceAllocationProblem:
 
@@ -302,21 +304,36 @@ class ResourceAllocationProblem:
         """
         return self.implementation[service]
 
-    def weighted_quadratic_norm(self, node, resources):
+    def norm(self, node, resources):
         """
 
         :param node:
         :param resources:
         :return:
         """
-        quadratic_weights = list()
+        quadratic_values = list()
         for resource in self.resources:
-            weighted_consumption = resources[resource]/self.available_resources[node][resource]
-            quadratic_weight = weighted_consumption**2
-            quadratic_weights.append(quadratic_weight)
 
-        weighted_quadratic_norm = math.sqrt(sum(quadratic_weights))
+            consumption = resources[resource]*self.resource_scalar(resource, node)
+            quadratic_value = consumption**2
+            quadratic_values.append(quadratic_value)
+
+        weighted_quadratic_norm = math.sqrt(sum(quadratic_values))
         return weighted_quadratic_norm
+
+    def resource_scalar(self, resource, node=None):
+        """
+
+        :param resource:
+        :param node:
+        :return:
+        """
+        if node is None:
+            total_resources_amount = self.get_total_resources_amount()
+        else:
+            total_resources_amount = self.available_resources[node]
+        avg = sum(total_resources_amount.values())/len(self.resources)
+        return avg/total_resources_amount[resource]
 
     def __str__(self):
         return "************************* RAP INSTANCE ************************\n" + "sdos: " + str(self.sdos) + "\n " \

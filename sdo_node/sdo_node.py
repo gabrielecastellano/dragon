@@ -103,7 +103,7 @@ class SDONode:
         print(self.sdo_name.ljust(5) +
               " | strong: " + str(strong_agreement).ljust(5) +
               " | winners: " + str(sorted(self.sdo_bidder.get_winners())) +
-              " | U: " + str(int(self.sdo_bidder.global_utility_function())) +
+              " | B: " + str(int(self.sdo_bidder.sum_bids())) +
               " | u: " + str(self.sdo_bidder.private_utility).rjust(3) +
               " | last update on: " + str(self.last_update_time - self.begin_time)[:5] +
               " | agreement on: " + str(self.agreement_time - self.begin_time)[:5] +

@@ -111,25 +111,23 @@ for i in range(Configuration.SDO_NUMBER):
     p_list.append(p)
 
 try:
-    private_utilities = list()
     for p in p_list:
-        ret_code = p.wait(timeout=200)
-        if ret_code < 0:
-            ret_code = 0
-        private_utilities.append(ret_code)
+        p.wait(timeout=200)
 
     print(" - Collect Results - ")
-    # sum of private utilities
-    print("Sum of private utilities: " + str(sum(private_utilities)))
-
     # fetch post process information
     placements = dict()
     message_rates = dict()
+    private_utilities = list()
     for i in range(Configuration.SDO_NUMBER):
         sdo_name = "sdo" + str(i)
+        utility_file = Configuration.RESULTS_FOLDER + "/utility_" + sdo_name + ".json"
         placement_file = Configuration.RESULTS_FOLDER + "/placement_" + sdo_name + ".json"
         rates_file = Configuration.RESULTS_FOLDER + "/rates_" + sdo_name + ".json"
         try:
+            with open(utility_file, "r") as f:
+                utility = int(f.read())
+                private_utilities.append(utility)
             with open(placement_file, "r") as f:
                 placement = json.loads(f.read())
                 placements[sdo_name] = placement
@@ -138,6 +136,9 @@ try:
                 message_rates[sdo_name] = rates
         except FileNotFoundError:
             continue
+
+    # sum of private utilities
+    print("Sum of private utilities: " + str(sum(private_utilities)))
 
     # print assignment info
     placement_file = Configuration.RESULTS_FOLDER + "/results.json"
