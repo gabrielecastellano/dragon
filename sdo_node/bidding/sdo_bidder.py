@@ -578,19 +578,19 @@ class SdoBidder:
         :raises NoFunctionsLeft: when is requested to skip mor services/functions than the available
         :return (str, str, str, float): service, function, node, marginal utility
         """
-        utility_dict = dict()
+        utility_list = list()
 
         for service in self.service_bundle:
             if service not in bid_bundle:
                 ranked_functions = self._rank_function_for_service(bid_bundle, service, blacklisted_nodes)
                 for function, node in ranked_functions:
                     utility_gain = ranked_functions[(function, node)]
-                    utility_dict[utility_gain] = service, function, node
+                    utility_list.append((utility_gain, service, function, node))
 
-        if skip_first >= len(utility_dict):
+        if skip_first >= len(utility_list):
             raise NoFunctionsLeft("No function left for this bundle")
-        marginal_utility, (best_service, best_function, best_node) = sorted(utility_dict.items(),
-                                                                            reverse=True)[skip_first]
+        marginal_utility, best_service, best_function, best_node = sorted(utility_list, key=lambda x: x[0],
+                                                                          reverse=True)[skip_first]
         return best_service, best_function, best_node, marginal_utility
 
     def _get_next_lighter_service(self, bid_bundle, consumptions_iterator, skip_services=set(),
