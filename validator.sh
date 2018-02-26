@@ -90,7 +90,7 @@ while [ ${sdo_number} -le 30 ]; do
             node_number=$((${node_number}+1))
             sed -i "11s/.*/    NODE_NUMBER = ${node_number}/" config/configuration.py
         done
-        neighbor_probability=$((${neighbor_probability}+3))
+        neighbor_probability=$((${neighbor_probability}+5))
         sed -i "9s/.*/    NEIGHBOR_PROBABILITY = ${neighbor_probability}/" config/configuration.py
     done
     sdo_number=$((${sdo_number}+1))
