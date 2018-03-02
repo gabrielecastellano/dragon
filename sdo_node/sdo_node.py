@@ -30,8 +30,9 @@ class SDONode:
 
         self.neighborhood_detector = NeighborhoodDetector(sdos=self.rap.sdos,
                                                           base_sdo=self.sdo_name,
+                                                          load_neighborhood=Configuration.LOAD_TOPOLOGY,
                                                           neighbor_probability=Configuration.NEIGHBOR_PROBABILITY,
-                                                          max_neighbors_ratio=Configuration.MAX_NEIGHBORS_RATIO,
+                                                          topology_file=Configuration.TOPOLOGY_FILE,
                                                           stable_connections=Configuration.STABLE_CONNECTIONS)
         self.neighborhood = self.neighborhood_detector.get_neighborhood()
 

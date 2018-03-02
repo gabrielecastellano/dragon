@@ -769,13 +769,17 @@ class SdoBidder:
         # utility = normalized_value*first_function_spreaded_consumption
         # logging.debug("utility: " + str(utility))
 
+        utility = normalized_value
+
         # apply node-based scaling
         scaling_factor = int(hashlib.sha256((self.sdo_name + node + service).encode()).hexdigest(), 16) / 2 ** 256
-        if len(taken_services) > 1 and bid_bundle[taken_services[-2]]['node'] == node:
-            # put an high node scaling for the last used node (between 0.70 and 1)
-            scaling_factor = (1 - 0.7) * scaling_factor + 0.7
-
-        utility = normalized_value*scaling_factor
+        # put an high node scaling for the last used node (between 0.70 and 1)
+        #if len(taken_services) > 1 and bid_bundle[taken_services[-2]]['node'] == node:
+        #    scaling_factor = (1 - 0.7) * scaling_factor + 0.7
+        # put a low node scaling for the used nodes (between 0.00 and 0.5)
+        #if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+        #    scaling_factor = (0.5 - 0) * scaling_factor
+        utility = utility*scaling_factor
         logging.debug("node-based scaled utility: " + str(utility))
 
         # apply a scaling (given for orchestrator)
@@ -906,6 +910,7 @@ class SdoBidder:
         """
         assignments = dict()
         ts = time.time()
+
         for n in set([bid_bundle[s]['node'] for s in bid_bundle]):
             private_node_utility = self._private_node_utility_from_bid_bundle(bid_bundle, n)
             overall_node_consumption = self.rap.get_bundle_resource_consumption([bid_bundle[s]['function']
@@ -913,6 +918,13 @@ class SdoBidder:
                                                                                  if bid_bundle[s]['node'] == n])
             demand_norm = self.rap.norm(n, overall_node_consumption)
             node_bid = private_node_utility  # global policy is to maximize private utilities
+            #node_cons = {node: 0 for node in self.rap.nodes}
+            #node_cons[n] = sum([0] + [self.rap.norm(n, overall_node_consumption)
+            #                          for s in bid_bundle
+            #                          if bid_bundle[s]['node'] == n])
+            #node_bid = sum([(sum([self.rap.norm(node, self.bidding_data[node][s]['consumption'])
+            #                      for s in self.rap.sdos if s != self.sdo_name]) + node_cons[node])**2
+            #                for node in self.rap.nodes])/100
             if node_bid/demand_norm > self.per_node_max_bid_ratio[n]:
                 node_bid = int(demand_norm*self.per_node_max_bid_ratio[n])
             node_assignment = {'bid': node_bid,

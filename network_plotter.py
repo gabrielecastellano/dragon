@@ -15,8 +15,9 @@ class NetworkPlotter:
         for sdo in sdos:
             neighbors = NeighborhoodDetector(sdos=sdos,
                                              base_sdo=sdo,
+                                             load_neighborhood=Configuration.LOAD_TOPOLOGY,
                                              neighbor_probability=Configuration.NEIGHBOR_PROBABILITY,
-                                             max_neighbors_ratio=Configuration.MAX_NEIGHBORS_RATIO,
+                                             topology_file=Configuration.TOPOLOGY_FILE,
                                              stable_connections=Configuration.STABLE_CONNECTIONS).get_neighborhood()
             # self.topology.add_edges_from([(sdo, sdo2) for sdo2 in neighbors])
             self.neighborhoods[sdo] = neighbors
