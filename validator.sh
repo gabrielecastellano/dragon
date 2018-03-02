@@ -14,7 +14,7 @@ rm -r -f validation/
 mkdir validation
 
 sdo_number=3
-sed -i "7s/.*/    SDO_NUMBER = ${sdo_number}/" config/configuration.py
+sed -i "/SDO_NUMBER/c\    SDO_NUMBER = ${sdo_number}/" config/configuration.py
 while [ ${sdo_number} -le 30 ]; do
 
     neighbor_probability=20
@@ -22,12 +22,12 @@ while [ ${sdo_number} -le 30 ]; do
     if [ ${sdo_number} -le 5 ] && [ ${neighbor_probability} -le ${min_probability} ]; then
         neighbor_probability=${min_probability}
     fi
-    sed -i "9s/.*/    NEIGHBOR_PROBABILITY = ${neighbor_probability}/" config/configuration.py
+    sed -i "/NEIGHBOR_PROBABILITY/c\    NEIGHBOR_PROBABILITY = ${neighbor_probability}/" config/configuration.py
 
     while [ ${neighbor_probability} -le 90 ]; do
 
         node_number=1
-        sed -i "11s/.*/    NODE_NUMBER = ${node_number}/" config/configuration.py
+        sed -i "/NODE_NUMBER/c\    NODE_NUMBER = ${node_number}/" config/configuration.py
 
         while [ ${node_number} -le 4 ]; do
 
@@ -37,19 +37,19 @@ while [ ${sdo_number} -le 30 ]; do
             echo ${sdo_number}" sdos, "${neighbor_probability}" neighbor_prob, "${node_number}" nodes " > ${file_name}
 
             bundle_percentage=40
-            sed -i "12s/.*/    BUNDLE_PERCENTAGE = ${bundle_percentage}/" config/configuration.py
+            sed -i "/BUNDLE_PERCENTAGE/c\    BUNDLE_PERCENTAGE = ${bundle_percentage}/" config/configuration.py
 
             while [ ${bundle_percentage} -le 80 ]; do
 
                 # increase timeout according with the problem size
                 agreement_timeout=$(($((50*${bundle_percentage}/80 + 30*${sdo_number}/30 + 20*${node_number}/4))/10))
                 weak_agreement_timeout=$((${agreement_timeout}*2))
-                sed -i "3s/.*/    AGREEMENT_TIMEOUT = ${agreement_timeout}/" config/configuration.py
-                sed -i "4s/.*/    WEAK_AGREEMENT_TIMEOUT = ${weak_agreement_timeout}/" config/configuration.py
+                sed -i "/AGREEMENT_TIMEOUT/c\    AGREEMENT_TIMEOUT = ${agreement_timeout}/" config/configuration.py
+                sed -i "/WEAK_AGREEMENT_TIMEOUT/c\    WEAK_AGREEMENT_TIMEOUT = ${weak_agreement_timeout}/" config/configuration.py
 
                 # fix sample frequency
                 sample_frequency=$(echo "scale=3; (${agreement_timeout}/22)^3*5" | bc -l )
-                sed -i "14s/.*/    SAMPLE_FREQUENCY = ${sample_frequency}/" config/configuration.py
+                sed -i "/SAMPLE_FREQUENCY/c\    SAMPLE_FREQUENCY = ${sample_frequency}/" config/configuration.py
 
                 # output some info
                 echo -e "Running agreement with "${sdo_number}" sdos, "${neighbor_probability}" neighbor_prob, "${node_number}" nodes "${bundle_percentage}" bundle_percentage ..."
@@ -85,14 +85,14 @@ while [ ${sdo_number} -le 30 ]; do
                 echo "-----------------------------------------" >> ${file_name}
 
                 bundle_percentage=$((${bundle_percentage}+5))
-                sed -i "12s/.*/    BUNDLE_PERCENTAGE = ${bundle_percentage}/" config/configuration.py
+                sed -i "/BUNDLE_PERCENTAGE/c\    BUNDLE_PERCENTAGE = ${bundle_percentage}/" config/configuration.py
             done
             node_number=$((${node_number}+1))
-            sed -i "11s/.*/    NODE_NUMBER = ${node_number}/" config/configuration.py
+            sed -i "/NODE_NUMBER/c\    NODE_NUMBER = ${node_number}/" config/configuration.py
         done
         neighbor_probability=$((${neighbor_probability}+5))
-        sed -i "9s/.*/    NEIGHBOR_PROBABILITY = ${neighbor_probability}/" config/configuration.py
+        sed -i "/NEIGHBOR_PROBABILITY/c\    NEIGHBOR_PROBABILITY = ${neighbor_probability}/" config/configuration.py
     done
     sdo_number=$((${sdo_number}+1))
-    sed -i "7s/.*/    SDO_NUMBER = ${sdo_number}/" config/configuration.py
+    sed -i "/SDO_NUMBER/c\    SDO_NUMBER = ${sdo_number}/" config/configuration.py
 done
