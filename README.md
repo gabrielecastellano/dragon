@@ -1,3 +1,3 @@
-# CBDA for Multi-Node DORA Problem
+# Distributed Orchestration at Service Granularity
 
-This is a Consensus-Based Decentralized Auction algorithm to solve the multi-node version of the Distributed Orchestration Resource Assignment problem.
+This architecture leverage a fully Distributed Orchestration Rasource Assignment (DORA) algorithm to solve the multi-node version of the Orchestration Resources Assignment problem, enabling multiple service orchestrators to share a common infrstructure.
