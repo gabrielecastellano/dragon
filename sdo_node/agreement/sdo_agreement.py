@@ -6,7 +6,7 @@ import time
 
 from config.logging_configuration import LoggingConfiguration
 from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
-from sdo_node.bidding.sdo_bidder import SdoBidder
+from sdo_node.orchestration.sdo_orchestrator import SdoOrchestrator
 
 
 class SdoAgreement:
@@ -23,7 +23,7 @@ class SdoAgreement:
         :param sdo_bidder:
         :type sdo_name: str
         :type resource_allocation_problem: ResourceAllocationProblem
-        :type sdo_bidder: SdoBidder
+        :type sdo_bidder: SdoOrchestrator
         :return:
         """
         self.sdo_name = sdo_name
@@ -98,11 +98,11 @@ class SdoAgreement:
             # compute new winners for this node
             self.sdo_bidder.bidding_data[node] = merged_data
         '''
-            node_winner_list, node_assignment_dict = self.sdo_bidder.auction(node)
+            node_winner_list, node_assignment_dict = self.sdo_bidder.election(node)
         '''
-        logging.info("Computing auction on new data")
-        winners, assignment_dict, lost_nodes = self.sdo_bidder.multi_node_auction()
-        logging.info("Auction completed on new data")
+        logging.info("Computing election on new data")
+        winners, assignment_dict, lost_nodes = self.sdo_bidder.multi_node_election()
+        logging.info("Election completed on new data")
 
         self.sdo_bidder.per_node_winners = winners
         # blacklisted_nodes = lost_nodes[self.sdo_name]
@@ -124,7 +124,7 @@ class SdoAgreement:
         # if overbid:
         if rebid_enabled and (overbid or self._pending_rebid):
             # try to repeat bidding on residual resources
-            self.sdo_bidder.sdo_bidding()
+            self.sdo_bidder.sdo_orchestrate()
             self._pending_rebid = False
         elif overbid:
             # postpone rebid

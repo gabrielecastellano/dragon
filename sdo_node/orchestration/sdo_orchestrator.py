@@ -13,10 +13,10 @@ import sys
 from config.configuration import Configuration
 from config.logging_configuration import LoggingConfiguration
 from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
-from sdo_node.bidding.exceptions import NoFunctionsLeft, SchedulingTimeout
+from sdo_node.orchestration.exceptions import NoFunctionsLeft, SchedulingTimeout
 
 
-class SdoBidder:
+class SdoOrchestrator:
     """
     This class builds the assignment vector for the given node, through a greedy approach,
     bidding for each function/resource taken.
@@ -56,23 +56,23 @@ class SdoBidder:
         self.private_utility = 0
         """ Stores the value of the private utility function for the current assignment """
 
-    def multi_node_auction(self, blacklisted_sdos=set()):
+    def multi_node_election(self, blacklisted_sdos=set()):
         """
 
         :param set of str blacklisted_sdos:
         :return: winner_list, assignment_dict, lost_nodes
         """
 
-        logging.info("****** Start Auction ******")
+        logging.info("****** Start Election ******")
         logging.log(LoggingConfiguration.VERBOSE, ": blacklisted sdos: " + str(blacklisted_sdos))
         winners = {node: set() for node in self.rap.nodes}
         lost_nodes = {sdo: set() for sdo in self.rap.sdos}
         bidded_nodes = {sdo: set() for sdo in self.rap.sdos}
 
-        # compute auction for all nodes
+        # compute election for all nodes
         assignment_dict = dict()
         for node in self.rap.nodes:
-            node_winner_list, node_assignment_dict = self.auction(node, blacklisted_sdos)
+            node_winner_list, node_assignment_dict = self.election(node, blacklisted_sdos)
             logging.debug(": node_winner_list: " + str(node_winner_list))
             winners[node] = node_winner_list
             assignment_dict[node] = node_assignment_dict
@@ -83,26 +83,26 @@ class SdoBidder:
             lost_nodes[sdo] = {n for n in bidded_nodes[sdo] if sdo not in winners[n]}
 
         # check if, in some nodes, there are winner that lost for sure at least an other node
-        # in that case, remove them and repeate again the auction
-        fake_winners = self._compute_fake_winners(winners, bidded_nodes, lost_nodes)
-        logging.debug("fake winners: " + str(fake_winners))
-        if len(fake_winners) > 0:
+        # in that case, remove them and repeate again the election
+        false_winners = self._compute_false_winners(winners, bidded_nodes, lost_nodes)
+        logging.debug("fake winners: " + str(false_winners))
+        if len(false_winners) > 0:
             # recursion
-            new_winners, assignment_dict, residual_lost_nodes = self.multi_node_auction(set.union(blacklisted_sdos,
-                                                                                                  fake_winners))
+            new_winners, assignment_dict, residual_lost_nodes = self.multi_node_election(set.union(blacklisted_sdos,
+                                                                                                   false_winners))
             for sdo in self.rap.sdos:
                 if sdo not in blacklisted_sdos:
-                    if sdo not in fake_winners:
+                    if sdo not in false_winners:
                         lost_nodes[sdo] = residual_lost_nodes[sdo]
             return new_winners, assignment_dict, lost_nodes
 
-        # Auction completed
+        # Election completed
         logging.info(" WINNERS DICT: '" + pprint.pformat(winners))
         logging.info(" LOST NODES DICT: '" + pprint.pformat(lost_nodes))
-        logging.info("******* End Auction *******")
+        logging.info("******* End Election *******")
         return winners, assignment_dict, lost_nodes
 
-    def _compute_fake_winners(self, winners, bidded_nodes, lost_nodes):
+    def _compute_false_winners(self, winners, bidded_nodes, lost_nodes):
         """
         Fake winner definition: an sdo that won some nodes, but lost at least an other node against somebody that is
         not, in turn, an other fake winner.
@@ -112,8 +112,8 @@ class SdoBidder:
         n0: [sdo1, sdo0]
         n1: [sdo0, sdo1]
         n2: [sdo2, sdo1]
-        sdo0 needs n0 and n1, but lost n0 against sdo1. However, sdo1 is a "fake winner". In fact, he needs n2, but he
-        lost it against sdo2, that is not a "fake winner" for sure, since he won all needed nodes.
+        sdo0 needs n0 and n1, but lost n0 against sdo1. However, sdo1 is a "false winner". In fact, he needs n2, but he
+        lost it against sdo2, that is not a "false winner" for sure, since he won all needed nodes.
         In absence of sdo2, both sdo0 and sdo1 may be fake winners. The precedence is given to the one with the higher
         bid value between each nodes. So if sdo1 max bid is higher that the sdo0 one, in absence of sdo2, sdo0 will be
         the fake winner.
@@ -140,13 +140,13 @@ class SdoBidder:
                     # check if the node is really lost
                     logging.debug("check if node " + node + " is really lost")
                     # takes the possible fake winners starting from this sdo
-                    fake_winner, found_fakes = self._find_fake_winner(sdo, node, winners, max_bids, bidded_nodes,
-                                                                      lost_nodes, known_fakes)
-                    collected_fakes.update(found_fakes)
-                    if fake_winner is not None:
+                    false_winner, found_falses = self._find_false_winner(sdo, node, winners, max_bids, bidded_nodes,
+                                                                         lost_nodes, known_fakes)
+                    collected_fakes.update(found_falses)
+                    if false_winner is not None:
                         # found a possible fake winner
-                        logging.debug("possible fake winner: " + fake_winner)
-                        collected_fakes.add(fake_winner)
+                        logging.debug("possible fake winner: " + false_winner)
+                        collected_fakes.add(false_winner)
                         continue
                     else:
                         logging.debug("node is lost, checked sdo is a fake winner!")
@@ -160,7 +160,7 @@ class SdoBidder:
         return set(known_fakes)
 
     @staticmethod
-    def _find_fake_winner(sdo, node, winners, max_bids, bidded_nodes, lost_nodes, known_fakes, ignore=list()):
+    def _find_false_winner(sdo, node, winners, max_bids, bidded_nodes, lost_nodes, known_falses, ignore=list()):
         """
         Search and return for an sdo against who the given sdo lost the given node, but that,
         recursively, lost for sure an other node against someone else.
@@ -170,46 +170,48 @@ class SdoBidder:
         :param max_bids:
         :param bidded_nodes:
         :param lost_nodes:
-        :param known_fakes:
+        :param known_falses:
         :param ignore: the recursion chain of sdos to ignore (avoid recursion loops)
         :return:
         """
-        found_fakes = set()
+        found_falses = set()
         for w in sorted(winners[node], key=lambda x: max_bids[x]):
             # check if w is a fake winner
-            if w in known_fakes:
+            if w in known_falses:
                 # w is already known to be fake!
-                return w, found_fakes
+                return w, found_falses
             if w not in ignore and len(bidded_nodes[w]) > 0:
                 for lost_node in lost_nodes[w]:
                     # w lost this node, check if, for this node there is a fake winner
-                    other_fake, other_fakes = SdoBidder._find_fake_winner(w, lost_node, winners, max_bids, bidded_nodes,
-                                                                          lost_nodes, known_fakes.union(found_fakes),
-                                                                          ignore + [sdo])
-                    if other_fake is None:
+                    other_false, other_falses = SdoOrchestrator._find_false_winner(w, lost_node, winners, max_bids,
+                                                                                   bidded_nodes, lost_nodes,
+                                                                                   known_falses.union(found_falses),
+                                                                                   ignore + [sdo])
+                    if other_false is None:
                         # no fakes winners found to save w, he lost that node for sure! so w is a fake winner
-                        return w, found_fakes
+                        return w, found_falses
                     else:
                         # w is not for sure a fake winner, because we found that he lost, in turn, against a fake one
-                        found_fakes.add(other_fake)
-                        found_fakes.update(other_fakes)
-        return None, found_fakes
+                        found_falses.add(other_false)
+                        found_falses.update(other_falses)
+        return None, found_falses
 
-    def auction(self, node, blacklisted_sdos=set()):
+    def election(self, node, blacklisted_sdos=set()):
         """
-        Greedy approach to solve the knapsack problem: select winner sdo maximizing total bid and fitting node resources
+        Greedy approach to solve the knapsack problem:
+        select winner sdo maximizing total vote and fitting node resources
         :param str node:
         :param set of str blacklisted_sdos:
         :return: list of winners, node assignment_dict
         """
 
-        logging.info("****** Auction on node '" + node + "' ******")
+        logging.info("****** Election on node '" + node + "' ******")
         node_winners = set()
         node_residual_resources = dict(self.rap.available_resources[node])
         node_assignment_dict = {sdo: dict() for sdo in self.rap.sdos}
-        logging.info("Bidding data: " + pprint.pformat(self.bidding_data[node], compact=True))
+        logging.info("Voting data: " + pprint.pformat(self.bidding_data[node], compact=True))
         while True:
-            logging.debug(" - Search for best bidder to add ...")
+            logging.debug(" - Search for best voter to add ...")
             best_bid_demand_ratio = 0
             best_bidder = None
 
@@ -248,21 +250,21 @@ class SdoBidder:
                 node_residual_resources = self.rap.sub_resources(node_residual_resources, allocated_resources)
             else:
                 # greedy process has finished
-                logging.debug(" - No winner found, auction terminated.'")
+                logging.debug(" - No winner found, election terminated.'")
                 break
 
         logging.info(" NODE " + node + " | WINNER LIST: " + pprint.pformat(node_winners))
-        logging.info("******* End Auction *******")
+        logging.info("******* End Election *******")
         return node_winners, node_assignment_dict
 
-    def sdo_bidding(self):
+    def sdo_orchestrate(self):
         """
         Builds, if possible, a winning assignment for this sdo, and add it to the global bidding data.
         Assignment can be the one optimizing the utility or, if it would not win, the one fitting left space, if any.
         :return:
         """
 
-        logging.info("------------ Starting bid process -------------")
+        logging.info("------------ Starting orchestration process -------------")
         # 1. Build, greedy, the best function vector (max total BID), that also is infrastructure-bounded
         winners = {node: set() for node in self.rap.nodes}
         assignment_dict = None
@@ -270,14 +272,14 @@ class SdoBidder:
         desired_implementation = list()
         self.implementations = list()
         self.private_utility = 0
-        # try to get the best greedy bundle stopping if sdo lost auction in all the nodes
+        # try to get the best greedy bundle stopping if sdo lost election in all the nodes
         desired_bid_bundle = None
         winners_set = set()
         while self.sdo_name not in winners_set and len(blacklisted_nodes) < len(self.rap.nodes):
             logging.info("Search for desired bundle ...")
             logging.info("Blacklisting nodes " + str(blacklisted_nodes))
             try:
-                desired_bid_bundle = self._greedy_bid(self.rap.available_resources, blacklisted_nodes)
+                desired_bid_bundle = self._greedy_embedding(self.rap.available_resources, blacklisted_nodes)
             except SchedulingTimeout as ste:
                 logging.info("Scheduling Timeout: " + ste.message)
                 desired_bid_bundle = None
@@ -286,8 +288,8 @@ class SdoBidder:
                 # release biddings
                 for node in self.rap.nodes:
                     self.bidding_data[node][self.sdo_name] = self.init_bid(time.time())
-                # compute auction to discover residual resources
-                winners, assignment_dict, lost_nodes = self.multi_node_auction()
+                # compute election to discover residual resources
+                winners, assignment_dict, lost_nodes = self.multi_node_election()
                 self.per_node_winners = winners
                 winners_set = set(itertools.chain(*self.per_node_winners.values()))
                 break
@@ -299,8 +301,8 @@ class SdoBidder:
             logging.info(" - checking if desired bundle would win ...")
             for node in assignment:
                 self.bidding_data[node][self.sdo_name] = assignment[node][self.sdo_name]
-            # compute auction
-            winners, assignment_dict, lost_nodes = self.multi_node_auction()
+            # compute election
+            winners, assignment_dict, lost_nodes = self.multi_node_election()
             # set new bid ratio bound
             self._update_bid_ratio_bound(winners, lost_nodes)
             self.per_node_winners = winners
@@ -319,7 +321,7 @@ class SdoBidder:
             self.private_utility = self._private_utility_from_bid_bundle(desired_bid_bundle)
         else:
             # 3. If not, repeat bid but just into the residual capacity
-            logging.info(" --- Sdo lost auction, checking for a less expensive solution ...")
+            logging.info(" --- Sdo lost election, checking for a less expensive solution ...")
 
             for node in self.rap.nodes:
                 if self.sdo_name in self.per_node_winners[node]:
@@ -340,7 +342,7 @@ class SdoBidder:
             logging.info(" ----- Residual resources: " + pprint.pformat(residual_resources))
             logging.info("Search for lighter bundle ...")
             try:
-                lighter_bid_bundle = self._patience_bid(residual_resources)
+                lighter_bid_bundle = self._patience_embedding(residual_resources)
             except SchedulingTimeout as ste:
                 logging.info("Scheduling Timeout: " + ste.message)
                 lighter_bid_bundle = None
@@ -364,9 +366,9 @@ class SdoBidder:
                     self.per_node_max_bid_ratio[node] = self.bidding_data[node][self.sdo_name]['bid'] / self.rap.norm(
                                                             node, self.bidding_data[node][self.sdo_name]['consumption'])
 
-        logging.info("Sdo final bidding: " + pprint.pformat({node: self.bidding_data[node][self.sdo_name]
-                                                             for node in self.rap.nodes}))
-        logging.info("------------ End of bid process -------------")
+        logging.info("Sdo final voting: " + pprint.pformat({node: self.bidding_data[node][self.sdo_name]
+                                                            for node in self.rap.nodes}))
+        logging.info("------------ End of orchestration process -------------")
 
     def _update_bid_ratio_bound(self, winners, lost_nodes):
         """
@@ -387,7 +389,7 @@ class SdoBidder:
                     min_bid_ratio -= sys.float_info.epsilon
                 self.per_node_max_bid_ratio[node] = min(self.per_node_max_bid_ratio[node], min_bid_ratio)
 
-    def _greedy_bid(self, resource_bound, blacklisted_nodes=set()):
+    def _greedy_embedding(self, resource_bound, blacklisted_nodes=set()):
         """
         Find the greedy-best solution fitting the given resources
         :param dict[str, dict[str, int]] resource_bound: for each node, resources that the solution must fit
@@ -459,7 +461,7 @@ class SdoBidder:
                               for k, v in current_bid_bundle.items()}
         return current_bid_bundle
 
-    def _patience_bid(self, resource_bound, blacklisted_nodes=set()):
+    def _patience_embedding(self, resource_bound, blacklisted_nodes=set()):
         """
         Find the patience-best solution fitting the given resources.
         Patience algorithm starts from a lower bound solution and try to substitute function one-by-one
@@ -774,11 +776,16 @@ class SdoBidder:
         # apply node-based scaling
         scaling_factor = int(hashlib.sha256((self.sdo_name + node + service).encode()).hexdigest(), 16) / 2 ** 256
         # put an high node scaling for the last used node (between 0.70 and 1)
-        #if len(taken_services) > 1 and bid_bundle[taken_services[-2]]['node'] == node:
-        #    scaling_factor = (1 - 0.7) * scaling_factor + 0.7
+        # if len(taken_services) > 1 and bid_bundle[taken_services[-2]]['node'] == node:
+        #     scaling_factor = (1 - 0.9) * scaling_factor + 0.9
+        if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+            scaling_factor = 1
         # put a low node scaling for the used nodes (between 0.00 and 0.5)
-        #if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-        #    scaling_factor = (0.5 - 0) * scaling_factor
+        if len(taken_services) > 1 and node not in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+        #    return 0
+            scaling_factor = (0.1 - 0) * scaling_factor
+        if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+            return 0
         utility = utility*scaling_factor
         logging.debug("node-based scaled utility: " + str(utility))
 
@@ -904,7 +911,7 @@ class SdoBidder:
 
     def _build_assignment_from_bid_bundle(self, bid_bundle):
         """
-        Builds and returns the assignment of this sdo for each node
+        Builds, votes and returns the assignment of this sdo for each node.
         :param dict[str, dict[str, union[str, int]]] bid_bundle:
         :return dict[str, [dict[str, union[str, dict, float]]:
         """
@@ -916,15 +923,22 @@ class SdoBidder:
             overall_node_consumption = self.rap.get_bundle_resource_consumption([bid_bundle[s]['function']
                                                                                  for s in bid_bundle
                                                                                  if bid_bundle[s]['node'] == n])
-            demand_norm = self.rap.norm(n, overall_node_consumption)
+            # [ VOTING ]
+            '''
+            # node_bid = private_node_utility  # global policy is to maximize private utilities
+            node_cons = {node: 0 for node in self.rap.nodes}
+            node_cons[n] = sum([0] + [self.rap.norm(n, overall_node_consumption)
+                                      for s in bid_bundle
+                                      if bid_bundle[s]['node'] == n])
+            node_bid = sum([(sum([self.rap.norm(node, self.bidding_data[node][s]['consumption'])
+                                  for s in self.rap.sdos if s != self.sdo_name]) + node_cons[node])**2
+                            for node in self.rap.nodes])/100
+            '''
             node_bid = private_node_utility  # global policy is to maximize private utilities
-            #node_cons = {node: 0 for node in self.rap.nodes}
-            #node_cons[n] = sum([0] + [self.rap.norm(n, overall_node_consumption)
-            #                          for s in bid_bundle
-            #                          if bid_bundle[s]['node'] == n])
-            #node_bid = sum([(sum([self.rap.norm(node, self.bidding_data[node][s]['consumption'])
-            #                      for s in self.rap.sdos if s != self.sdo_name]) + node_cons[node])**2
-            #                for node in self.rap.nodes])/100
+            # node_bid = 1/len(set([bid_bundle[s]['node'] for s in bid_bundle]))*100
+            # node_bid = (1/(self.rap.norm(n, overall_node_consumption))**2)*10000000
+            # [scoring function] ensures convergence guarantees
+            demand_norm = self.rap.norm(n, overall_node_consumption)
             if node_bid/demand_norm > self.per_node_max_bid_ratio[n]:
                 node_bid = int(demand_norm*self.per_node_max_bid_ratio[n])
             node_assignment = {'bid': node_bid,
@@ -968,7 +982,7 @@ class SdoBidder:
         :param dict[str, union[str, int]]] bid_bundle:
         :return:
         """
-        return sum([SdoBidder._private_node_utility_from_bid_bundle(bid_bundle, node)
+        return sum([SdoOrchestrator._private_node_utility_from_bid_bundle(bid_bundle, node)
                     for node in set([bid_bundle[s]['node'] for s in bid_bundle])])
 
     def init_bid(self, timestamp=0):

@@ -12,3 +12,6 @@ config/*.ini
 
 .idea/
 __pycache__/
+
+validation/
+results/
