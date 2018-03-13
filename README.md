@@ -1,3 +1,7 @@
-# Distributed Orchestration at Service Granularity
+## Senate: A Distributed Service Orchestration with Guarantees
 
-This architecture leverage a fully Distributed Orchestration Rasource Assignment (DORA) algorithm to solve the multi-node version of the Orchestration Resources Assignment problem, enabling multiple service orchestrators to share a common infrstructure.
+Senate is a distributed architecture that enables precise orchestration of heterogeneous services over a common edge infrastructure. To assign shared resources to service orchestrators, Senate uses the Distributed Orchestration Resource Assignment (DORA), an approximation algorithm that we designed to guarantee both a bound on convergence time and an optimal (1-1/e)-approximation with respect to the Pareto optimal resource assignment.
+
+### Technical Report
+
+Available soon.
