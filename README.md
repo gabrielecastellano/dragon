@@ -4,4 +4,4 @@ Senate is a distributed architecture that enables precise orchestration of heter
 
 ### Technical Report
 
-Available soon on arxiv.org (scheduled at Fri, 16 Mar 2018 00:00:00 GMT).
+Our technical report is available [here](https://arxiv.org/pdf/1803.05499.pdf).
