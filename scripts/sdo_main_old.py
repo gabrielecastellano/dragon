@@ -5,7 +5,7 @@ import pprint
 from config.logging_configuration import LoggingConfiguration
 from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
 from sdo_node.agreement.sdo_agreement import SdoAgreement
-from sdo_node.bidding.sdo_bidder import SdoBidder
+from sdo_node.orchestration.sdo_orchestrator import SdoOrchestrator
 from sdo_node.utils.bidding_message import BiddingMessage
 from sdo_node.utils.messaging import Messaging
 from sdo_node.utils.neighborhood import NeighborhoodDetector
@@ -190,11 +190,11 @@ if __name__ == "__main__":
     logging.info(rap)
 
     # SDO node
-    sdo_bidder = SdoBidder(SDO_NAME, rap, SERVICE_BUNDLE)
+    sdo_bidder = SdoOrchestrator(SDO_NAME, rap, SERVICE_BUNDLE)
     sdo_agreement = SdoAgreement(SDO_NAME, rap, sdo_bidder)
 
     # first bidding
-    sdo_bidder.sdo_bidding()
+    sdo_bidder.sdo_orchestrate()
     logging.info(pprint.pformat(sdo_bidder.bidding_data))
 
     # init messaging

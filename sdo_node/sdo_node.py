@@ -11,7 +11,7 @@ import itertools
 from config.configuration import Configuration
 from config.logging_configuration import LoggingConfiguration
 from sdo_node.agreement.sdo_agreement import SdoAgreement
-from sdo_node.bidding.sdo_bidder import SdoBidder
+from sdo_node.orchestration.sdo_orchestrator import SdoOrchestrator
 from sdo_node.utils.bidding_message import BiddingMessage
 from sdo_node.utils.messaging import Messaging
 from sdo_node.utils.neighborhood import NeighborhoodDetector
@@ -24,7 +24,7 @@ class SDONode:
         # SDO node
         self.sdo_name = sdo_name
         self.rap = rap
-        self.sdo_bidder = SdoBidder(sdo_name, rap, service_bundle)
+        self.sdo_bidder = SdoOrchestrator(sdo_name, rap, service_bundle)
         self.sdo_agreement = SdoAgreement(sdo_name, rap, self.sdo_bidder)
         self.agree_neighbors = set()
 
@@ -70,7 +70,7 @@ class SDONode:
         self._messaging.set_stop_timeout(Configuration.WEAK_AGREEMENT_TIMEOUT, permanent=True)
 
         # first bidding
-        self.sdo_bidder.sdo_bidding()
+        self.sdo_bidder.sdo_orchestrate()
         logging.info(pprint.pformat(self.sdo_bidder.bidding_data))
 
         # broadcast first bidding data

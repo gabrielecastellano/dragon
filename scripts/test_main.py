@@ -5,7 +5,7 @@ import colorlog
 
 from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
 from sdo_node.agreement.sdo_agreement import SdoAgreement
-from sdo_node.bidding.sdo_bidder import SdoBidder
+from sdo_node.orchestration.sdo_orchestrator import SdoOrchestrator
 
 LOG_ON_FILE = False
 LOG_FILE = "sdo1_log.log"
@@ -81,22 +81,22 @@ if __name__ == "__main__":
 
     # SDO node
     sdo1_service_bundle = ["s1", "s2", "s3"]
-    sdo1_bidder = SdoBidder("sdo1", rap, sdo1_service_bundle)
+    sdo1_bidder = SdoOrchestrator("sdo1", rap, sdo1_service_bundle)
     sdo1_agreement = SdoAgreement("sdo1", rap, sdo1_bidder)
     # mu_1 = node_bidder._marginal_utility({}, "s2", "f4")
     # node_bidder.bidding_data['sdo2'] = [('f2', 50), ('f3', 49), ('f5', 48)]
     #sdo1_bidder.bidding_data['sdo2'] = {'bid': 230,
     #                                   'consumption': {'bandwidth': 700, 'cpu': 6, 'memory': 2500},
     #                                   'timestamp': 1517014425.854801}
-    sdo1_bidder.sdo_bidding()
+    sdo1_bidder.sdo_orchestrate()
     logging.info(pprint.pformat(sdo1_bidder.bidding_data))
 
     # time.sleep(2)
 
     sdo2_service_bundle = ["s5", "s4", "s4"]
-    sdo2_bidder = SdoBidder("sdo2", rap, sdo2_service_bundle)
+    sdo2_bidder = SdoOrchestrator("sdo2", rap, sdo2_service_bundle)
     sdo2_agreement = SdoAgreement("sdo2", rap, sdo2_bidder)
-    sdo2_bidder.sdo_bidding()
+    sdo2_bidder.sdo_orchestrate()
     logging.info(pprint.pformat(sdo2_bidder.bidding_data))
 
     # time.sleep(2)
