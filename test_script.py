@@ -112,7 +112,7 @@ for i in range(Configuration.SDO_NUMBER):
 
 try:
     for p in p_list:
-        p.wait(timeout=200)
+        p.wait(timeout=50)
 
     print(" - Collect Results - ")
     # fetch post process information

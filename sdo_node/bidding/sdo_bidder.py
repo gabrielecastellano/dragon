@@ -779,6 +779,12 @@ class SdoBidder:
         # put a low node scaling for the used nodes (between 0.00 and 0.5)
         #if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
         #    scaling_factor = (0.5 - 0) * scaling_factor
+        # do not use other nodes
+        #if len(taken_services) > 1 and node not in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+        #    return 0
+        # do not reuse nodes
+        if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+            return 0
         utility = utility*scaling_factor
         logging.debug("node-based scaled utility: " + str(utility))
 
