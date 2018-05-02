@@ -1,6 +1,5 @@
 *.*~
 *.bak
-*.pyc
 *.log
 *.project
 *.pydevproject
@@ -15,3 +14,4 @@ __pycache__/
 
 validation/
 results/
+*.zip
