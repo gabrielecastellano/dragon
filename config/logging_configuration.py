@@ -24,7 +24,7 @@ class LoggingConfiguration:
         log_colors["INFO"] = "cyan"
         log_colors["VERBOSE"] = "black"
         log_colors["IMPORTANT"] = "green"
-        message_format = "%(log_color)s%(asctime)s.%(msecs)03d | %(levelname)s | [%(funcName)s] %(message)s - " \
+        message_format = "%(log_color)s%(asctime)s.%(msecs)03d | %(levelname)10s | [%(funcName)15s] %(message)s - " \
                          "%(filename)s:%(lineno)s"
         formatter = colorlog.ColoredFormatter(
             message_format,
