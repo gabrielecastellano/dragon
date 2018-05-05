@@ -2,7 +2,24 @@
     "sdos": [
         "sdo0",
         "sdo1",
-        "sdo2"
+        "sdo2",
+        "sdo3",
+        "sdo4",
+        "sdo5",
+        "sdo6",
+        "sdo7",
+        "sdo8",
+        "sdo9",
+        "sdo10",
+        "sdo11",
+        "sdo12",
+        "sdo13",
+        "sdo14",
+        "sdo15",
+        "sdo16",
+        "sdo17",
+        "sdo18",
+        "sdo19"
     ],
     "functions": [
         "f1",
@@ -29,7 +46,10 @@
         "bandwidth"
     ],
     "nodes": [
-        "node0"
+        "node0",
+        "node1",
+        "node2",
+        "node3"
     ],
     "consumption": {
         "f1": {

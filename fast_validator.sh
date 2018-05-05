@@ -3,7 +3,7 @@
 rm validation/*
 
 sdo_number=3
-neighbor_probability=20
+neighbor_probability="FIXED"
 node_number=4
 bundle_percentage=40
 
@@ -44,33 +44,41 @@ while [ ${sdo_number} -le 20 ]; do
         echo -e "AGREEMENT_TIMEOUT = "${agreement_timeout}
         echo -e "SAMPLE_FREQUENCY = "${sample_frequency}
 
-        # print info into log file
-        echo "" >> ${file_name}
-        echo "" >> ${file_name}
-        echo "" >> ${file_name}
-        echo "-----------------------------------------" >> ${file_name}
-        echo "-" >> ${file_name}
-        echo "SDO_NUMBER: "${sdo_number} >> ${file_name}
-        echo "NEIGHBOR_PROBABILITY: "${neighbor_probability} >> ${file_name}
-        echo "NODE_NUMBER: "${node_number} >> ${file_name}
-        echo "BUNDLE_PERCENTAGE_LENGTH: "${bundle_percentage} >> ${file_name}
-        echo "-" >> ${file_name}
-        echo "AGREEMENT_TIMEOUT: "${agreement_timeout} >> ${file_name}
-        echo "SAMPLE_FREQUENCY: "${sample_frequency} >> ${file_name}
-        echo "-" >> ${file_name}
+        repetition=1
+        while [ ${repetition} -le 5 ]; do
 
-        # run the instance
-        killall python3
-        # python3 -m scripts.message_monitor &
-        # monitor_pid=$!
-        python3 test_script.py >> ${file_name}
-        # kill -2 ${monitor_pid}
-        # wait ${monitor_pid}
-        killall python3
-        python3 -m scripts.delete_queues
-        # kill -9 ${monitor_pid}
+            # print repetition number
+            echo -e "repetition no."${repetition}
 
-        echo "-----------------------------------------" >> ${file_name}
+            # print info into log file
+            echo "" >> ${file_name}
+            echo "" >> ${file_name}
+            echo "" >> ${file_name}
+            echo "-----------------------------------------" >> ${file_name}
+            echo "-" >> ${file_name}
+            echo "SDO_NUMBER: "${sdo_number} >> ${file_name}
+            echo "NEIGHBOR_PROBABILITY: "${neighbor_probability} >> ${file_name}
+            echo "NODE_NUMBER: "${node_number} >> ${file_name}
+            echo "BUNDLE_PERCENTAGE_LENGTH: "${bundle_percentage} >> ${file_name}
+            echo "-" >> ${file_name}
+            echo "AGREEMENT_TIMEOUT: "${agreement_timeout} >> ${file_name}
+            echo "SAMPLE_FREQUENCY: "${sample_frequency} >> ${file_name}
+            echo "-" >> ${file_name}
+
+            # run the instance
+            killall python3
+            # python3 -m scripts.message_monitor &
+            # monitor_pid=$!
+            python3 test_script.py >> ${file_name}
+            # kill -2 ${monitor_pid}
+            # wait ${monitor_pid}
+            killall python3
+            python3 -m scripts.delete_queues
+            # kill -9 ${monitor_pid}
+
+            echo "-----------------------------------------" >> ${file_name}
+            repetition=$((${repetition}+1))
+        done
 
         bundle_percentage=$((${bundle_percentage}+5))
         sed -i "/BUNDLE_PERCENTAGE/c\    BUNDLE_PERCENTAGE = ${bundle_percentage}" config/configuration.py
