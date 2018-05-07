@@ -776,8 +776,8 @@ class SdoOrchestrator:
         # apply node-based scaling
         scaling_factor = int(hashlib.sha256((self.sdo_name + node + service).encode()).hexdigest(), 16) / 2 ** 256
         # put an high node scaling for the last used node (between 0.7 and 1)
-        if len(taken_services) > 1 and bid_bundle[taken_services[-2]]['node'] == node:
-            scaling_factor = (1 - 0.7) * scaling_factor + 0.7
+        #if len(taken_services) > 1 and bid_bundle[taken_services[-2]]['node'] == node:
+        #    scaling_factor = (1 - 0.7) * scaling_factor + 0.7
         # put the maximum for the already used ones
         #if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
         #   scaling_factor = 1
@@ -785,9 +785,13 @@ class SdoOrchestrator:
         if len(taken_services) > 1 and node not in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
             # return 0
             scaling_factor = (0.1 - 0) * scaling_factor
+        # put a low node scaling for already used node (between 0.0 and 3)
+        # if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+            # return 0
+        #    scaling_factor = (0.3 - 0) * scaling_factor
         # do not reuse nodes
         #if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-        #    return 0
+        #
         utility = utility*scaling_factor
         logging.debug("node-based scaled utility: " + str(utility))
 
