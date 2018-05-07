@@ -15,9 +15,9 @@ mkdir validation
 
 sed -i "/LOAD_TOPOLOGY/c\    LOAD_TOPOLOGY = True" config/configuration.py
 
-sdo_number=3
+sdo_number=9
 sed -i "/SDO_NUMBER/c\    SDO_NUMBER = ${sdo_number}" config/configuration.py
-while [ ${sdo_number} -le 20 ]; do
+while [ ${sdo_number} -le 9 ]; do
 
     file_name="validation/"${sdo_number}"sdos__"${neighbor_probability}"neighbor_prob__"${node_number}"nodes.txt"
     echo "Output file: "${file_name}
