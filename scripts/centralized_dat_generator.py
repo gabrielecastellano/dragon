@@ -4,9 +4,10 @@ from collections import OrderedDict
 import itertools
 
 filename = "sdos__FIXEDneighbor_prob__4nodes.txt"
+c_filename = "sdos__FIXEDneighbor_prob__4nodes_CENTRALIZED.txt"
 folder = "validation"
 performance_output = folder + "/stat.dat"
-cases_performance_output = folder + "/cases_stat.dat"
+cases_performance_output = folder + "/centralized_stat.dat"
 messages_output = folder + "/messages.dat"
 
 bundle_percentages = {}
@@ -38,16 +39,25 @@ avg_sum_private_utilities = {}
 time_rates_l = {}
 messages_sample_l = {}
 
+c_assigned_percentages = {}
+c_allocated_percentages = {}
+c_sum_private_utilities = {}
+
+CENTRALIZED_CASES = ["SERVICE", "POWER-CONSUMPTION", "GREEDY", "LOAD-BALANCE", "NODE-LOADING", "BEST-FIT-POLICY"]
+
 FIRST = 3
 LAST = 21
 
-CASES = 5
-SAMPLES = 5
+CASES = 1
+SAMPLES = 10
 
 for i in range(FIRST, LAST):
     filename_i = folder + "/" + str(i) + filename
+    c_filename_i = folder + "/" + str(i) + c_filename
     with open(filename_i, "r") as f:
         data = f.read()
+    with open(c_filename_i, "r") as f:
+        c_data = f.read()
 
     s = str(data)
     last_updates[i] = {}
@@ -66,6 +76,10 @@ for i in range(FIRST, LAST):
     avg_received_messages[i] = {}
     avg_sum_private_utilities[i] = {}
 
+    c_assigned_percentages[i] = {}
+    c_allocated_percentages[i] = {}
+    c_sum_private_utilities[i] = {}
+
     incompleted = False
     for j in range(CASES):
 
@@ -73,12 +87,9 @@ for i in range(FIRST, LAST):
         p = s[s.find("BUNDLE_PERCENTAGE_LENGTH:") + len("BUNDLE_PERCENTAGE_LENGTH:"):s.find("BUNDLE_PERCENTAGE_LENGTH:") + len("BUNDLE_PERCENTAGE_LENGTH:") + s[s.find("BUNDLE_PERCENTAGE_LENGTH:") + len("BUNDLE_PERCENTAGE_LENGTH:"):].index("\n")]
         bundle_percentages[j] = int(p)
 
-        last_updates[i][j] = []
-        demand_percentages[i][j] = []
+        demand_percentages[i][j] = 0
         assigned_percentages[i][j] = []
         allocated_percentages[i][j] = []
-        sent_messages_l[i][j] = []
-        received_messages_l[i][j] = []
         sum_private_utilities_l[i][j] = []
 
         for k in range(SAMPLES):
@@ -109,11 +120,9 @@ for i in range(FIRST, LAST):
                     break
 
             # collect data for this sample
-            # last update time
-            last_updates[i][j].append(last_update)
             # statistical total demand percentage
             p = s[s.find("Statistical total demand percentage:") + len("Statistical total demand percentage:"):s.find("Statistical total demand percentage:") + len("Statistical total demand percentage:") + s[s.find("Statistical total demand percentage:") + len("Statistical total demand percentage:"):].index("\n")]
-            demand_percentages[i][j].append(round(float(p), 3))
+            demand_percentages[i][j] = round(float(p), 3)
             # sum of private utilities:
             p = s[s.find("Sum of private utilities:") + len("Sum of private utilities:"):s.find("Sum of private utilities:") + len("Sum of private utilities:") + s[s.find("Sum of private utilities:") + len("Sum of private utilities:"):].index("\n")]
             sum_private_utilities_l[i][j].append(int(p))
@@ -123,104 +132,64 @@ for i in range(FIRST, LAST):
             # percentage of successfully allocated bundles
             p = s[s.find("Percentage of successfully allocated bundles:") + len("Percentage of successfully allocated bundles:"):s.find("Percentage of successfully allocated bundles:") + len("Percentage of successfully allocated bundles:") + s[s.find("Percentage of successfully allocated bundles:") + len("Percentage of successfully allocated bundles:"):].index("\n")]
             allocated_percentages[i][j].append(round(float(p), 3))
-            # messages number
-            sent_messages_l[i][j].append(sent_messages)
-            received_messages_l[i][j].append(received_messages)
-            # message rates
-            '''
-            wanted_case = int(CASES/2)
-            if i not in time_rates_l.keys() and j == wanted_case:
-                d = s[s.find("OrderedDict") + len("OrderedDict"):s.find(")])") + len(")])")]
-                time_rates = OrderedDict(ast.literal_eval(d))
-                # skip if strange zero rate inside but keep if is last sample
-                if 0.0 not in list(time_rates.values())[1:] or k == SAMPLES-1:
-                    time_rates_l[i] = time_rates
-                    messages_sample_l[i] = sent_messages
-            '''
 
         # calculate per case average data
-        avg_last_updates[i][j] = round(sum(last_updates[i][j]) / SAMPLES, 3)
-        avg_demand_percentages[i][j] = round(sum(demand_percentages[i][j]) / SAMPLES, 3)
+        avg_demand_percentages[i][j] = demand_percentages[i][j]
         avg_assigned_percentages[i][j] = round(sum(assigned_percentages[i][j]) / SAMPLES, 3)
         avg_allocated_percentages[i][j] = round(sum(allocated_percentages[i][j]) / SAMPLES, 3)
-        avg_sent_messages[i][j] = round(sum(sent_messages_l[i][j]) / SAMPLES, 3)
-        avg_received_messages[i][j] = round(sum(received_messages_l[i][j]) / SAMPLES, 3)
         avg_sum_private_utilities[i][j] = round(sum(sum_private_utilities_l[i][j]) / SAMPLES, 1)
 
-    # calculate total average data
-    tot_avg_last_updates[i] = round(sum(list(itertools.chain(*last_updates[i].values()))) / (CASES*SAMPLES), 3)
-    tot_avg_demand_percentages[i] = round(sum(list(itertools.chain(*demand_percentages[i].values()))) / (CASES*SAMPLES), 3)
-    tot_avg_assigned_percentages[i] = round(sum(list(itertools.chain(*assigned_percentages[i].values()))) / (CASES*SAMPLES), 3)
-    tot_avg_allocated_percentages[i] = round(sum(list(itertools.chain(*allocated_percentages[i].values()))) / (CASES*SAMPLES), 3)
-    tot_avg_sent_messages[i] = round(sum(list(itertools.chain(*sent_messages_l[i].values()))) / (CASES*SAMPLES), 3)
-    tot_avg_received_messages[i] = round(sum(list(itertools.chain(*received_messages_l[i].values()))) / (CASES*SAMPLES), 3)
-    tot_avg_sum_private_utilities[i] = round(sum(list(itertools.chain(*sum_private_utilities_l[i].values()))) / (CASES*SAMPLES), 1)
-
-# save average data on dat file
-with open(performance_output, "w") as f:
-    # + "\t\t".join(["t n." + str(i+1) for i in range(SAMPLES)])
-    f.write("#" + "\t" + "\t" + "t avg" + "\t" + "t min" + "\t" + "t max" + "\t" + "avg d%" + "\t" + "min d%" + "\t" + "max d%" + "\t" + "avg a%" + "\t" + "min a%" + "\t" + "max a%" + "\t" + "avg w%" + "\t" + "min w%" + "\t" + "max w%" + "\t" + "avg msg" + "\t" + "min msg" + "\t" + "max msg" + "\t" + "avg u" + "\t" + "min u" + "\t" + "max u" + "\n")
-    for i in range(FIRST, LAST):
-        # + "\t".join([str(x).ljust(5) for x in last_updates[i]])
-        f.write(str(i) + "\t" + "\t" + str(tot_avg_last_updates[i]).ljust(5) + "\t" +
-                str(min(list(itertools.chain(*last_updates[i].values())))).ljust(5) + "\t" +
-                str(max(list(itertools.chain(*last_updates[i].values())))).ljust(5) + "\t" +
-                str(tot_avg_demand_percentages[i]).ljust(5) + "\t" +
-                str(min(list(itertools.chain(*demand_percentages[i].values())))).ljust(5) + "\t" +
-                str(max(list(itertools.chain(*demand_percentages[i].values())))).ljust(5) + "\t" +
-                str(tot_avg_assigned_percentages[i]).ljust(5) + "\t" +
-                str(min(list(itertools.chain(*assigned_percentages[i].values())))).ljust(5) + "\t" +
-                str(max(list(itertools.chain(*assigned_percentages[i].values())))).ljust(5) + "\t" +
-                str(tot_avg_allocated_percentages[i]).ljust(5) + "\t" +
-                str(min(list(itertools.chain(*allocated_percentages[i].values())))).ljust(5) + "\t" +
-                str(max(list(itertools.chain(*allocated_percentages[i].values())))).ljust(5) + "\t" +
-                str(tot_avg_sent_messages[i]).ljust(5) + "\t" +
-                str(min(list(itertools.chain(*sent_messages_l[i].values())))).ljust(5) + "\t" +
-                str(max(list(itertools.chain(*sent_messages_l[i].values())))).ljust(5) + "\t" +
-                str(tot_avg_sum_private_utilities[i]).ljust(5) + "\t" +
-                str(min(list(itertools.chain(*sum_private_utilities_l[i].values())))).ljust(5) + "\t" +
-                str(max(list(itertools.chain(*sum_private_utilities_l[i].values())))).ljust(5) + "\n")
+    # collect centralized performances
+    for case in CENTRALIZED_CASES:
+        s = str(c_data)
+        m = s[s.find("sent messages:") + len("sent messages:"):s.find("sent messages:") + len("sent messages:") + 9]
+        s = s[s.find("UTILITY: " + case) + len("UTILITY: " + case):]
+        # sum of private utilities:
+        p = s[s.find("Sum of service utilities:") + len("Sum of service utilities:"):s.find("Sum of service utilities:") + len("Sum of service utilities:") + s[s.find("Sum of service utilities:") + len("Sum of service utilities:"):].index("\n")]
+        c_sum_private_utilities[i][case] = int(p)
+        # percentage of assigned resources
+        p = s[s.find("Percentage of assigned resources:") + len("Percentage of assigned resources:"):s.find("Percentage of assigned resources:") + len("Percentage of assigned resources:") + s[s.find("Percentage of assigned resources:") + len("Percentage of assigned resources:"):].index("\n")]
+        c_assigned_percentages[i][case] = round(float(p), 3)
+        # percentage of successfully allocated bundles
+        p = s[s.find("Percentage of successfully allocated bundles:") + len("Percentage of successfully allocated bundles:"):s.find("Percentage of successfully allocated bundles:") + len("Percentage of successfully allocated bundles:") + s[s.find("Percentage of successfully allocated bundles:") + len("Percentage of successfully allocated bundles:"):].index("\n")]
+        c_allocated_percentages[i][case] = round(float(p), 3)
 
 # save per case data on dat file
 with open(cases_performance_output, "w") as f:
     for j in range(CASES):
         f.write("#" + " bundle percentage length: \t" + str(bundle_percentages[j]) + "\n")
-        f.write("#" + "\t" + "\t" + "t avg" + "\t" + "t min" + "\t" + "t max" + "\t" + "avg d%" + "\t" + "min d%" + "\t" + "max d%" + "\t" + "avg a%" + "\t" + "min a%" + "\t" + "max a%" + "\t" + "avg w%" + "\t" + "min w%" + "\t" + "max w%" + "\t" + "avg msg" + "\t" + "min msg" + "\t" + "max msg" + "\t" + "avg u" + "\t" + "min u" + "\t" + "max u" + "\n")
+        f.write("#" + "\t" + "\t" + "avg d%" + "\t" + "avg a%" + "\t" + "min a%" + "\t" + "max a%" + "\t" + "avg w%" + "\t" + "min w%" + "\t" + "max w%" + "\t" + "avg u" + "\t" + "min u" + "\t" + "max u" + "\n")
         for i in range(FIRST, LAST):
             # + "\t".join([str(x).ljust(5) for x in last_updates[i]])
             f.write(str(i) + "\t" + "\t" +
-                    str(avg_last_updates[i][j]).ljust(5) + "\t" +
-                    str(min(last_updates[i][j])).ljust(5) + "\t" +
-                    str(max(last_updates[i][j])).ljust(5) + "\t" +
                     str(avg_demand_percentages[i][j]).ljust(5) + "\t" +
-                    str(min(demand_percentages[i][j])).ljust(5) + "\t" +
-                    str(max(demand_percentages[i][j])).ljust(5) + "\t" +
                     str(avg_assigned_percentages[i][j]).ljust(5) + "\t" +
                     str(min(assigned_percentages[i][j])).ljust(5) + "\t" +
                     str(max(assigned_percentages[i][j])).ljust(5) + "\t" +
                     str(avg_allocated_percentages[i][j]).ljust(5) + "\t" +
                     str(min(allocated_percentages[i][j])).ljust(5) + "\t" +
                     str(max(allocated_percentages[i][j])).ljust(5) + "\t" +
-                    str(avg_sent_messages[i][j]).ljust(5) + "\t" +
-                    str(min(sent_messages_l[i][j])).ljust(5) + "\t" +
-                    str(max(sent_messages_l[i][j])).ljust(5) + "\t" +
                     str(avg_sum_private_utilities[i][j]).ljust(5) + "\t" +
                     str(min(sum_private_utilities_l[i][j])).ljust(5) + "\t" +
                     str(max(sum_private_utilities_l[i][j])).ljust(5) + "\n")
         f.write("\n")
         f.write("\n")
 
-'''
-# save message rates on dat file
-with open(messages_output, "w") as f:
-    for i in range(FIRST, LAST):
-        f.write(str(i) + "\n")
+    for case in CENTRALIZED_CASES:
+        f.write("#" + " centralized case: \t" + case + "\n")
+        f.write("#" + "\t" + "\t" + "avg d%" + "\t" + "avg a%" + "\t" + "min a%" + "\t" + "max a%" + "\t" + "avg w%" + "\t" + "min w%" + "\t" + "max w%" + "\t" + "avg u" + "\t" + "min u" + "\t" + "max u" + "\n")
+        for i in range(FIRST, LAST):
+            # + "\t".join([str(x).ljust(5) for x in last_updates[i]])
+            f.write(str(i) + "\t" + "\t" +
+                    str(avg_demand_percentages[i][0]).ljust(5) + "\t" +
+                    str(c_assigned_percentages[i][case]).ljust(5) + "\t" +
+                    str(c_assigned_percentages[i][case]).ljust(5) + "\t" +
+                    str(c_assigned_percentages[i][case]).ljust(5) + "\t" +
+                    str(c_allocated_percentages[i][case]).ljust(5) + "\t" +
+                    str(c_allocated_percentages[i][case]).ljust(5) + "\t" +
+                    str(c_allocated_percentages[i][case]).ljust(5) + "\t" +
+                    str(c_sum_private_utilities[i][case]).ljust(5) + "\t" +
+                    str(c_sum_private_utilities[i][case]).ljust(5) + "\t" +
+                    str(c_sum_private_utilities[i][case]).ljust(5) + "\n")
         f.write("\n")
-        for sample in time_rates_l[i]:
-            f.write(str(sample) + "\t\t" + str(time_rates_l[i][sample]) + "\n")
         f.write("\n")
-        f.write(str(messages_sample_l[i]) + "\n")
-        f.write("\n")
-        f.write(" --------------- \n")
-        f.write("\n")
-'''
