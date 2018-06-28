@@ -15,19 +15,19 @@ mkdir validation
 
 sed -i "/LOAD_TOPOLOGY/c\    LOAD_TOPOLOGY = True" config/configuration.py
 
-sdo_number=9
+sdo_number=3
 sed -i "/SDO_NUMBER/c\    SDO_NUMBER = ${sdo_number}" config/configuration.py
-while [ ${sdo_number} -le 9 ]; do
+while [ ${sdo_number} -le 20 ]; do
 
     file_name="validation/"${sdo_number}"sdos__"${neighbor_probability}"neighbor_prob__"${node_number}"nodes.txt"
     echo "Output file: "${file_name}
     echo -e > ${file_name}
     echo ${sdo_number}" sdos, "${neighbor_probability}" neighbor_prob, "${node_number}" nodes " > ${file_name}
 
-    bundle_percentage=40
+    bundle_percentage=50
     sed -i "/BUNDLE_PERCENTAGE/c\    BUNDLE_PERCENTAGE = ${bundle_percentage}" config/configuration.py
 
-    while [ ${bundle_percentage} -le 60 ]; do
+    while [ ${bundle_percentage} -le 50 ]; do
 
         # increase timeout according with the problem size
         agreement_timeout=$(($((50*${bundle_percentage}/80 + 30*${sdo_number}/30 + 20*${node_number}/4))/10))
@@ -39,13 +39,16 @@ while [ ${sdo_number} -le 9 ]; do
         sample_frequency=$(echo "scale=3; (${agreement_timeout}/22)^3*5" | bc -l )
         sed -i "/SAMPLE_FREQUENCY/c\    SAMPLE_FREQUENCY = ${sample_frequency}" config/configuration.py
 
+        # set utility
+        sed -i "/PRIVATE_UTILITY/c\    PRIVATE_UTILITY = 'SERVICE'" config/configuration.py
+
         # output some info
         echo -e "Running agreement with "${sdo_number}" sdos, "${neighbor_probability}" neighbor_prob, "${node_number}" nodes "${bundle_percentage}" bundle_percentage ..."
         echo -e "AGREEMENT_TIMEOUT = "${agreement_timeout}
         echo -e "SAMPLE_FREQUENCY = "${sample_frequency}
 
         repetition=1
-        while [ ${repetition} -le 5 ]; do
+        while [ ${repetition} -le 10 ]; do
 
             # print repetition number
             echo -e "repetition no."${repetition}
@@ -78,6 +81,44 @@ while [ ${sdo_number} -le 9 ]; do
 
             echo "-----------------------------------------" >> ${file_name}
             repetition=$((${repetition}+1))
+        done
+
+        # centralized
+        file_name_c="validation/"${sdo_number}"sdos__"${neighbor_probability}"neighbor_prob__"${node_number}"nodes_CENTRALIZED.txt"
+        declare -a utilities=("SERVICE" "POWER-CONSUMPTION" "GREEDY" "LOAD-BALANCE" "NODE-LOADING" "BEST-FIT-POLICY")
+
+        for i in "${utilities[@]}"
+        do
+            # set utility
+            sed -i "/PRIVATE_UTILITY/c\    PRIVATE_UTILITY = '${i}'" config/configuration.py
+
+            # print info into log file
+            echo "" >> ${file_name_c}
+            echo "" >> ${file_name_c}
+            echo "" >> ${file_name_c}
+            echo "-----------------------------------------" >> ${file_name_c}
+            echo "-" >> ${file_name_c}
+            echo "SDO_NUMBER: "${sdo_number} >> ${file_name_c}
+            echo "NEIGHBOR_PROBABILITY: "${neighbor_probability} >> ${file_name_c}
+            echo "NODE_NUMBER: "${node_number} >> ${file_name_c}
+            echo "BUNDLE_PERCENTAGE_LENGTH: "${bundle_percentage} >> ${file_name_c}
+            echo "-" >> ${file_name_c}
+            echo "AGREEMENT_TIMEOUT: "${agreement_timeout} >> ${file_name_c}
+            echo "SAMPLE_FREQUENCY: "${sample_frequency} >> ${file_name_c}
+            echo "-" >> ${file_name_c}
+            echo "UTILITY: "${i} >> ${file_name_c}
+
+            # run the instance
+            killall python3
+            # python3 -m scripts.message_monitor &
+            # monitor_pid=$!
+            python3 test_script_centralized.py >> ${file_name_c}
+            # kill -2 ${monitor_pid}
+            # wait ${monitor_pid}
+            killall python3
+            # kill -9 ${monitor_pid}
+
+            echo "-----------------------------------------" >> ${file_name_c}
         done
 
         bundle_percentage=$((${bundle_percentage}+5))

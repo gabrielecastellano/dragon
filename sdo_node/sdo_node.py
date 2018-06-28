@@ -6,8 +6,6 @@ from collections import OrderedDict
 from datetime import datetime
 from threading import Lock, Thread, Condition
 
-import itertools
-
 from config.configuration import Configuration
 from config.logging_configuration import LoggingConfiguration
 from sdo_node.agreement.sdo_agreement import SdoAgreement
@@ -101,6 +99,7 @@ class SDONode:
             logging.info(" - Assigned functions are: \n" + pprint.pformat(self.sdo_bidder.implementations))
         else:
             logging.info(" - Sdo '" + self.sdo_name + " didn't get enough resources to implement bundle :-(")
+        self.sdo_bidder.private_utility = self.sdo_bidder.get_service_utility()[0]
         print(self.sdo_name.ljust(5) +
               " | strong: " + str(strong_agreement).ljust(5) +
               " | winners: " + str(sorted(self.sdo_bidder.get_winners())) +

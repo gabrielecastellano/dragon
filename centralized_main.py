@@ -94,9 +94,11 @@ if __name__ == "__main__":
 
     print(len(SDO_NAMES))
 
+    '''
     for i, sdo in enumerate(SDO_NAMES):
         logging.info(sdo + " [" + ", ".join(SERVICE_BUNDLES[i]) + "]")
         print(sdo + " [" + ", ".join(SERVICE_BUNDLES[i]) + "]")
+    '''
 
     # SDO node
     sdo_node = CentralizedNode(SDO_NAMES, rap, SERVICE_BUNDLES)
@@ -105,7 +107,6 @@ if __name__ == "__main__":
     strong, placements, utilities = sdo_node.start_centralized_scheduling()
 
     for sdo in SDO_NAMES:
-        print(sdo)
         placement_filename = Configuration.RESULTS_FOLDER + "/placement_" + sdo + ".json"
         os.makedirs(os.path.dirname(placement_filename), exist_ok=True)
         with open(placement_filename, "w") as f:

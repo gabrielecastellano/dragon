@@ -90,6 +90,14 @@ for i in range(Configuration.SDO_NUMBER):
     sdo_name = "sdo" + str(i)
     service_bundle = [s for s in rap.services
                       if int(str(int(hashlib.sha256((sdo_name+s).encode()).hexdigest(), 16))[-2:]) < Configuration.BUNDLE_PERCENTAGE]
+    if sdo_name == "sdo9":
+        service_bundle = [s for s in rap.services
+                          if int(str(int(hashlib.sha256(("sdo10"+s).encode()).hexdigest(), 16))[-2:]) < Configuration.BUNDLE_PERCENTAGE]
+    elif sdo_name == "sdo15":
+        service_bundle = [s for s in rap.services
+                          if int(str(int(hashlib.sha256(("sdo14"+s).encode()).hexdigest(), 16))[-2:]) < Configuration.BUNDLE_PERCENTAGE]
+    elif sdo_name == "sdo19":
+        service_bundle = service_bundle[:3]
     if len(service_bundle) == 0:
         service_bundle.append(rap.services[0])
     print(sdo_name + " : " + str(service_bundle))
@@ -101,7 +109,7 @@ print(" ".join(bundle_arg))
 p = subprocess.Popen(["python3", "centralized_main.py"] + bundle_arg + ["-l", Configuration.LOG_LEVEL, "-o"])
 
 try:
-    p.wait(timeout=50)
+    p.wait(timeout=30)
 except TimeoutExpired:
     p.kill()
 
