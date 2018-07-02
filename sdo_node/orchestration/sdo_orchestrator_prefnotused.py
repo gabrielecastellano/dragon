@@ -10,13 +10,10 @@ import itertools
 
 import sys
 
-from config.config import Configuration
+from config.configuration import Configuration
 from config.logging_configuration import LoggingConfiguration
 from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
 from sdo_node.orchestration.exceptions import NoFunctionsLeft, SchedulingTimeout
-
-
-configuration = Configuration()
 
 
 class SdoOrchestrator:
@@ -58,9 +55,6 @@ class SdoOrchestrator:
 
         self.private_utility = 0
         """ Stores the value of the private utility function for the current assignment """
-
-        self.detailed_implementations = list()
-        """ If node is a winner, contains all the won implementation for each service of its bundle with utilities """
 
     def multi_node_election(self, blacklisted_sdos=set()):
         """
@@ -277,21 +271,18 @@ class SdoOrchestrator:
         blacklisted_nodes = set()
         desired_implementation = list()
         self.implementations = list()
-        self.detailed_implementations = list()
         self.private_utility = 0
         # try to get the best greedy bundle stopping if sdo lost election in all the nodes
         desired_bid_bundle = None
-        impl = list()
         winners_set = set()
         while self.sdo_name not in winners_set and len(blacklisted_nodes) < len(self.rap.nodes):
             logging.info("Search for desired bundle ...")
             logging.info("Blacklisting nodes " + str(blacklisted_nodes))
             try:
-                desired_bid_bundle, impl = self._greedy_embedding(self.rap.available_resources, blacklisted_nodes)
+                desired_bid_bundle = self._greedy_embedding(self.rap.available_resources, blacklisted_nodes)
             except SchedulingTimeout as ste:
                 logging.info("Scheduling Timeout: " + ste.message)
                 desired_bid_bundle = None
-                impl = list()
             logging.info("Desired bundle: " + pprint.pformat(desired_bid_bundle))
             if desired_bid_bundle is None:
                 # release biddings
@@ -327,7 +318,6 @@ class SdoOrchestrator:
             # we found the new bids for this sdo
             logging.info(" --- Sdo is a strong winner!!!")
             self.implementations = desired_implementation
-            self.detailed_implementations = impl
             self.private_utility = self._private_utility_from_bid_bundle(desired_bid_bundle)
         else:
             # 3. If not, repeat bid but just into the residual capacity
@@ -348,16 +338,14 @@ class SdoOrchestrator:
                 self.bidding_data[node][self.sdo_name] = self.init_bid(time.time())
 
             self.implementations = list()
-            self.detailed_implementations = list()
             residual_resources = self.rap.get_residual_resources(assignment_dict)
             logging.info(" ----- Residual resources: " + pprint.pformat(residual_resources))
             logging.info("Search for lighter bundle ...")
             try:
-                lighter_bid_bundle, impl = self._patience_embedding(residual_resources)
+                lighter_bid_bundle = self._patience_embedding(residual_resources)
             except SchedulingTimeout as ste:
                 logging.info("Scheduling Timeout: " + ste.message)
                 lighter_bid_bundle = None
-                impl = list()
             logging.info("Lighter bundle: " + pprint.pformat(lighter_bid_bundle))
             if lighter_bid_bundle is None:
                 logging.info(" ----- There are no solutions fitting the remaining space.")
@@ -369,7 +357,6 @@ class SdoOrchestrator:
                     self.bidding_data[node][self.sdo_name] = assignment[node][self.sdo_name]
                     self.per_node_winners[node].add(self.sdo_name)
                 self.implementations = lighter_implementation
-                self.detailed_implementations = impl
                 self.private_utility = self._private_utility_from_bid_bundle(lighter_bid_bundle)
         # set the limits for future rebidding
         if self.sdo_name in self.get_winners():
@@ -433,13 +420,14 @@ class SdoOrchestrator:
                               "' on node '" + n +
                               "' giving marginal utility " + str(mu))
                 # add to current bundle
-                current_bid_bundle[s] = {"function": f, "node": n, "utility": mu, "added_at": time.time()}
+                current_bid_bundle[s] = {"function": f, "node": n, "utility": mu}
                 current_implementations = [(serv,
                                             current_bid_bundle[serv]["function"],
                                             current_bid_bundle[serv]["node"],
                                             current_bid_bundle[serv]["utility"])
                                            for serv in sorted(current_bid_bundle,
-                                                              key=lambda x: current_bid_bundle[x]["added_at"])]
+                                                              key=lambda x: current_bid_bundle[x]["utility"],
+                                                              reverse=True)]
                 logging.debug(" --- Current bundle = " + str(current_implementations))
                 # check if the total is bounded
                 assignments = self._build_assignment_from_bid_bundle(current_bid_bundle)
@@ -449,7 +437,7 @@ class SdoOrchestrator:
                     del current_bid_bundle[s]
                     skip_vector[len(current_bid_bundle)] += 1
                     # check timeout
-                    if time.time() > begin_ts + configuration.SCHEDULING_TIME_LIMIT:
+                    if time.time() > begin_ts + Configuration.SCHEDULING_TIME_LIMIT:
                         raise SchedulingTimeout("Scheduling took to long, aborted")
                 else:
                     # update utility and go next iteration
@@ -463,25 +451,15 @@ class SdoOrchestrator:
                 skip_vector[len(current_bid_bundle)] = 0
                 if len(added_services) == 0:
                     # there are no feasible solution
-                    return None, None
+                    return None
                 del current_bid_bundle[added_services[-1]]
                 added_services = added_services[:-1]
                 skip_vector[len(current_bid_bundle)] += 1
 
-        current_implementations = [(serv,
-                                    current_bid_bundle[serv]["function"],
-                                    current_bid_bundle[serv]["node"],
-                                    current_bid_bundle[serv]["utility"])
-                                   for serv in sorted(current_bid_bundle,
-                                                      key=lambda x: current_bid_bundle[x]["added_at"])]
-
         # round utilities
-        current_bid_bundle = {k: {'function': v['function'],
-                                  'node': v['node'],
-                                  'utility': int(round(v['utility'])),
-                                  'added_at': v['added_at']}
+        current_bid_bundle = {k: {'function': v['function'], 'node': v['node'], 'utility': int(round(v['utility']))}
                               for k, v in current_bid_bundle.items()}
-        return current_bid_bundle, current_implementations
+        return current_bid_bundle
 
     def _patience_embedding(self, resource_bound, blacklisted_nodes=set()):
         """
@@ -513,28 +491,28 @@ class SdoOrchestrator:
                                                          resource_bound=resource_bound)
             if s is None:
                 # building of bid_bundle is not possible
-                return None, None
+                return None
             logging.debug(" --- Found the next " + str(skip_vector[len(current_bid_bundle)]+1) +
                           "-lighter service: '" + s +
                           "' with function '" + f +
                           "' on node '" + n +
                           "' giving marginal utility " + str(mu))
             # add to current bundle
-            current_bid_bundle[s] = {"function": f, "node": n, "utility": mu, "added_at": time.time()}
+            current_bid_bundle[s] = {"function": f, "node": n, "utility": mu}
             current_implementations = [(serv,
                                         current_bid_bundle[serv]["function"],
                                         current_bid_bundle[serv]["node"],
                                         current_bid_bundle[serv]["utility"])
                                        for serv in sorted(current_bid_bundle,
-                                                          key=lambda x: current_bid_bundle[x]["added_at"])]
-
+                                                          key=lambda x: current_bid_bundle[x]["utility"],
+                                                          reverse=True)]
             logging.debug(" --- Current bundle = " + str(current_implementations))
             # check if the total is bounded
             assignments = self._build_assignment_from_bid_bundle(current_bid_bundle)
             if not self.rap.check_custom_bound(assignments, resource_bound):
                 # if not, there are no feasible solution
                 logging.debug(" ----- Exceeded capacity, no feasible assignment found ...")
-                return None, None
+                return None
             else:
                 # update utility and go next iteration
                 logging.debug(" ----- Bounded, added to bundle.")
@@ -563,7 +541,7 @@ class SdoOrchestrator:
             consumption_iterator[s] = self._get_function_average_consumption(f, node=n, resources=resource_bound)
             if mu > current_bid_bundle[s]["utility"]:
                 old_impl = dict(current_bid_bundle[s])
-                current_bid_bundle[s] = {"function": f, "node": n, "utility": mu, "added_at": time.time()}
+                current_bid_bundle[s] = {"function": f, "node": n, "utility": mu}
 
                 # check if the total is bounded
                 assignments = self._build_assignment_from_bid_bundle(current_bid_bundle)
@@ -580,28 +558,18 @@ class SdoOrchestrator:
                                                 current_bid_bundle[serv]["node"],
                                                 current_bid_bundle[serv]["utility"])
                                                for serv in sorted(current_bid_bundle,
-                                                                  key=lambda x: current_bid_bundle[x]["added_at"])]
+                                                                  key=lambda x: current_bid_bundle[x]["utility"],
+                                                                  reverse=True)]
                     logging.debug(" --- Current bundle = " + str(current_implementations))
                     added_services.append(s)
                     current_utility += mu
-                    if time.time() > begin_ts + configuration.SCHEDULING_TIME_LIMIT:
+                    if time.time() > begin_ts + Configuration.SCHEDULING_TIME_LIMIT:
                         break
 
-        current_implementations = [(serv,
-                                    current_bid_bundle[serv]["function"],
-                                    current_bid_bundle[serv]["node"],
-                                    current_bid_bundle[serv]["utility"])
-                                   for serv in sorted(current_bid_bundle,
-                                                      key=lambda x: current_bid_bundle[x]["added_at"])]
-
         # round utilities
-        current_bid_bundle = {k: {'function': v['function'],
-                                  'node': v['node'],
-                                  'utility': int(round(v['utility'])),
-                                  'added_at': v['added_at']}
+        current_bid_bundle = {k: {'function': v['function'], 'node': v['node'], 'utility': int(round(v['utility']))}
                               for k, v in current_bid_bundle.items()}
-
-        return current_bid_bundle, current_implementations
+        return current_bid_bundle
 
     def _get_next_best_service(self, bid_bundle, skip_first=0, blacklisted_nodes=set()):
         """
@@ -698,7 +666,7 @@ class SdoOrchestrator:
                 ranked_functions[(function, node)] = marginal_utility
         return ranked_functions
 
-    def _marginal_utility(self, bid_bundle, service, function, node, service_specific=False):
+    def _marginal_utility(self, bid_bundle, service, function, node):
         """
         Compute the marginal utility that sdo gains by adding given service:function:node to the bundle.
         This function may depend by the particular SDO.
@@ -708,35 +676,12 @@ class SdoOrchestrator:
         :param str node: node where the function will be placed
         :return: the marginal utility
         """
-        spu = configuration.SUBMODULAR_P_UTILITY
         if not self.rap.check_function_implements_service(service.split('_', 1)[-1], function):
             return 0
-        if configuration.PRIVATE_UTILITY == "SERVICE" or service_specific:
-            # currently a pseudo-randomized value is returned
-            return self._pseudo_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-        elif configuration.PRIVATE_UTILITY == "POWER-CONSUMPTION":
-            return self._power_consumption_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-        elif configuration.PRIVATE_UTILITY == "GREEDY":
-            return self._greed_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-        elif configuration.PRIVATE_UTILITY == "LOAD-BALANCE":
-            return self._load_balancer_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-        elif configuration.PRIVATE_UTILITY == "NODE-LOADING":
-            return self._node_loading_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-        elif configuration.PRIVATE_UTILITY == "BEST-FIT-POLICY":
-            # if self.sdo_name == 'sdo1' or self.sdo_name == 'sdo4' or self.sdo_name == 'sdo7' or self.sdo_name == 'sdo10' or self.sdo_name == 'sdo13' or self.sdo_name == 'sdo19':
-            #     return self._load_balancer_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-            # elif self.sdo_name == 'sdo8' or self.sdo_name == 'sdo11' or self.sdo_name == 'sdo12' or self.sdo_name == 'sdo15' or self.sdo_name == 'sdo16' or self.sdo_name == 'sdo18':
-            #     return self._node_loading_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-            if self.sdo_name == 'sdo1' or self.sdo_name == 'sdo2' or self.sdo_name == 'sdo4' or self.sdo_name == 'sdo5' or self.sdo_name == 'sdo10' or self.sdo_name == 'sdo11' or self.sdo_name == 'sdo13' or self.sdo_name == 'sdo14' or self.sdo_name == 'sdo15':
-                return self._load_balancer_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-            elif self.sdo_name == 'sdo12' or self.sdo_name == 'sdo13' or self.sdo_name == 'sdo17':
-                return self._node_loading_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-            else:
-                return self._greed_marginal_utility(bid_bundle, service, function, node, submodular=spu)
-        else:
-            return 0
+        # currently a pseudo-randomized value is returned
+        return self._pseudo_marginal_utility(bid_bundle, service, function, node)
 
-    def _pseudo_marginal_utility(self, bid_bundle, service, function, node, submodular=True):
+    def _pseudo_marginal_utility(self, bid_bundle, service, function, node):
         """
         Function returning a meaningless, submodular, utility for the given function:node.
         The utility is:
@@ -752,11 +697,11 @@ class SdoOrchestrator:
         logging.debug(" - Getting utility for function '" + function + "' on service '" + service + "'")
 
         # put a placeholder element just to avoid zip() complain
-        bid_bundle['.'] = {'function': '.', 'added_at': 0}
+        bid_bundle['.'] = {'function': '.', 'utility': sys.maxsize}
         # create two lists of services and functions that are in the bundle, temporally ordered (decreasing utility)
         taken_services, taken_functions = zip(*sorted([(k, v['function']) for k, v in bid_bundle.items()],
-                                                      key=lambda x: bid_bundle[x[0]]['added_at']))
-
+                                                      key=lambda x: bid_bundle[x[0]]['utility'],
+                                                      reverse=True))
         # remove the placeholder
         del bid_bundle['.']
         taken_services = list(taken_services)[1:]
@@ -771,34 +716,30 @@ class SdoOrchestrator:
         first_function_spreaded_consumption = self._gen_log_func(first_function_consumption, 0, 1, 30, 1, 20.0855)
         logging.debug("First function scalar: " + str(first_function_spreaded_consumption))
 
-        if submodular:
-            # bounds
-            bounds = [((len(self.service_bundle)-x)/len(self.service_bundle)) for x in range(len(taken_services)+2)]
-            logging.debug("Bounds: " + pprint.pformat(bounds))
+        # bounds
+        bounds = [((len(self.service_bundle)-x)/len(self.service_bundle)) for x in range(len(taken_services)+2)]
+        logging.debug("Bounds: " + pprint.pformat(bounds))
 
-            # apply a transformation to the bounds (transformation remains the same for previous bound)
-            taken_services.append(service)
-            taken_functions.append(function)
-            transformed_bounds = list()
-            for index, bound in enumerate(bounds):
-                transformation, params = self._get_transformation(taken_services[:index], taken_functions[:index])
-                logging.debug("Transformation: " + str(transformation) + ", " + str(bound) + ", " + str(params))
-                transformed_bound = transformation(bound, *params)
-                if index > 0:
-                    transformed_bound = transformed_bound*transformed_bounds[index-1]
-                transformed_bounds.append(transformed_bound)
-            logging.debug("Transformed bounds: " + pprint.pformat(transformed_bounds))
-            transformed_bounds = [int(x*100) for x in transformed_bounds]
-            logging.debug("Final bounds: " + pprint.pformat(transformed_bounds))
+        # apply a transformation to the bounds (transformation remains the same for previous bound)
+        taken_services.append(service)
+        taken_functions.append(function)
+        transformed_bounds = list()
+        for index, bound in enumerate(bounds):
+            transformation, params = self._get_transformation(taken_services[:index], taken_functions[:index])
+            logging.debug("Transformation: " + str(transformation) + ", " + str(bound) + ", " + str(params))
+            transformed_bound = transformation(bound, *params)
+            if index > 0:
+                transformed_bound = transformed_bound*transformed_bounds[index-1]
+            transformed_bounds.append(transformed_bound)
+        logging.debug("Transformed bounds: " + pprint.pformat(transformed_bounds))
+        transformed_bounds = [int(x*100) for x in transformed_bounds]
+        logging.debug("Final bounds: " + pprint.pformat(transformed_bounds))
 
-            # range
-            inf = transformed_bounds[-1]
-            sup = transformed_bounds[-2]
-            if inf == 0:
-                inf = 1
-        else:
+        # range
+        inf = transformed_bounds[-1]
+        sup = transformed_bounds[-2]
+        if inf == 0:
             inf = 1
-            sup = 100
         logging.debug("inf: " + str(inf) + " | sup: " + str(sup))
 
         # calculate a pseudo-random normalized utility on 1. resource usage 2. bundle+node_name+services+functions
@@ -809,8 +750,7 @@ class SdoOrchestrator:
                                      reduce(lambda x, y: x + y, sorted([""]+taken_functions)) +
                                      self.sdo_name).encode('utf-8')).hexdigest(), 16)
         decimal_digest = digest/2**256
-        # perturbation_factor = (0.3-(-0.3))*decimal_digest + (-0.3)
-        perturbation_factor = 0
+        perturbation_factor = (0.3-(-0.3))*decimal_digest + (-0.3)
         logging.debug("av_decimal_consumption: " + str(function_consumption) + " | decimal_digest: " + str(decimal_digest))
         logging.debug("spreaded_consumption: " + str(spreaded_consumption))
         logging.debug("perturbation_factor: " + str(perturbation_factor))
@@ -818,8 +758,12 @@ class SdoOrchestrator:
         # normalized_value = (spread_consumption+decimal_digest)/2
         perturbated_value = spreaded_consumption+perturbation_factor
         logging.debug("perturbated_value: " + str(perturbated_value))
-        # normalized_value = (perturbated_value+0.3)/1.6
-        normalized_value = perturbated_value
+        if perturbated_value < 0:
+            normalized_value = 0
+        elif perturbated_value > 1:
+            normalized_value = 1
+        else:
+            normalized_value = perturbated_value
 
         logging.debug("normalized_value: " + str(normalized_value))
 
@@ -827,451 +771,33 @@ class SdoOrchestrator:
         # utility = normalized_value*first_function_spreaded_consumption
         # logging.debug("utility: " + str(utility))
 
-        if self.sdo_name == 'sdo1' or self.sdo_name == 'sdo2' or self.sdo_name == 'sdo4' or self.sdo_name == 'sdo5' or self.sdo_name == 'sdo7' or self.sdo_name == 'sdo8' or self.sdo_name == 'sdo11' or self.sdo_name == 'sdo12' or self.sdo_name == 'sdo15' or self.sdo_name == 'sdo19':
-                # or self.sdo_name == 'sdo4' or self.sdo_name == 'sdo8' or self.sdo_name == 'sdo13' or self.sdo_name == 'sdo17':
-            normalized_value = 0.5
-
-        if self.sdo_name == 'sdo15':
-            normalized_value = 0.2
-
         utility = normalized_value
 
         # apply node-based scaling
         scaling_factor = int(hashlib.sha256((self.sdo_name + node + service).encode()).hexdigest(), 16) / 2 ** 256
-        if self.sdo_name == 'sdo1' or self.sdo_name == 'sdo4' or self.sdo_name == 'sdo7' or self.sdo_name == 'sdo15' or self.sdo_name == 'sdo16':
-            # put a low node scaling for already used node (between 0.0 and 3)
-            if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-                scaling_factor = (0.1 - 0) * scaling_factor
-        #if True:
-            # put an high node scaling for the last used node (between 0.7 and 1)
-            #if len(taken_services) > 1 and bid_bundle[taken_services[-2]]['node'] == node:
-            #    scaling_factor = (1 - 0.7) * scaling_factor + 0.7
-        #elif False:
-            # put the maximum for the already used ones
-            #if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-            #   scaling_factor = 1
-        else: # self.sdo_name == 'sdo2' or self.sdo_name == 'sdo6' or self.sdo_name == 'sdo10' or self.sdo_name == 'sdo14' or self.sdo_name == 'sdo18':
-            # put a low node scaling for not used nodes (between 0.00 and 0.5)
-            if len(taken_services) > 1 and node not in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-                # return 0
-                scaling_factor = (0.1 - 0) * scaling_factor
-        #elif False:
-            # put a low node scaling for already used node (between 0.0 and 3)
-            # if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-                # return 0
-            #    scaling_factor = (0.3 - 0) * scaling_factor
-        #elif False:
-            # do not reuse nodes
-            #if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-            #
+        # put an high node scaling for the last used node (between 0.7 and 1)
+        #if len(taken_services) > 1 and bid_bundle[taken_services[-2]]['node'] == node:
+        #    scaling_factor = (1 - 0.7) * scaling_factor + 0.7
+        # put the maximum for the already used ones
+        #if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+        #   scaling_factor = 1
+        # put a low node scaling for not used nodes (between 0.00 and 0.5)
+        #if len(taken_services) > 1 and node not in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+            # return 0
+        #    scaling_factor = (0.1 - 0) * scaling_factor
+        # put a low node scaling for already used node (between 0.0 and 3)
+        if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+            # return 0
+            scaling_factor = (0.3 - 0) * scaling_factor
+        # do not reuse nodes
+        #if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
+        #
         utility = utility*scaling_factor
         logging.debug("node-based scaled utility: " + str(utility))
 
         # apply a scaling (given for orchestrator)
         scaling_factor = int(hashlib.sha256(self.sdo_name.encode('utf-8')).hexdigest(), 16)/2**256
         utility = utility*scaling_factor
-        logging.debug("sdo-based scaled utility: " + str(utility))
-
-        utility = 1.043935 + (0.0002072756 - 1.043935)/(1 + (utility/0.1348168)**1.411127)
-
-        # put the utility value between inf and sup
-        utility = (sup - inf) * utility + inf
-        logging.debug("bounded utility: " + str(utility))
-
-        logging.debug("marginal_utility for function '" + function + "' on service '" + service + " ... \n" +
-                      " ... taken services " + str(taken_services) + " ... \n" +
-                      " ... and functions " + str(taken_functions) + " ... \n" +
-                      " ... is: " + str(utility))
-
-        if utility < 5:
-            utility = 5
-
-        return utility
-
-    def _power_consumption_marginal_utility(self, bid_bundle, service, function, node, submodular=True):
-        """
-        Function returning a sub-modular for the given function:node.
-        The utility is:
-         1. higher for function with an small resource usage
-         2. higher for already used nodes
-         3. between 0 and 100
-        :param bid_bundle:
-        :param service:
-        :param function:
-        :param node:
-        :return:
-        """
-        logging.debug(" - Getting utility for function '" + function + "' on service '" + service + "'")
-
-        # put a placeholder element just to avoid zip() complain
-        bid_bundle['.'] = {'function': '.', 'added_at': 0}
-        # create two lists of services and functions that are in the bundle, temporally ordered (decreasing utility)
-        taken_services, taken_functions = zip(*sorted([(k, v['function']) for k, v in bid_bundle.items()],
-                                                      key=lambda x: bid_bundle[x[0]]['added_at']))
-        # remove the placeholder
-        del bid_bundle['.']
-        taken_services = list(taken_services)[1:]
-        taken_functions = list(taken_functions)[1:]
-
-        logging.debug("Services in bundle: " + pprint.pformat(taken_services))
-        logging.debug("Functions in bundle: " + pprint.pformat(taken_functions))
-
-        # Average consumption of first function of the bundle bounds all the utilities
-        first_function_consumption = self._get_function_average_consumption((taken_functions + [function])[0])
-        # first_function_spreaded_consumption = self._gen_log_func(first_function_consumption, 0, 1, 40, 1, 54.598)
-        first_function_spreaded_consumption = self._gen_log_func(first_function_consumption, 0, 1, 30, 1, 20.0855)
-        logging.debug("First function scalar: " + str(first_function_spreaded_consumption))
-
-        if submodular:
-            # bounds
-            bounds = [((len(self.service_bundle)-x)/len(self.service_bundle)) for x in range(len(taken_services)+2)]
-            logging.debug("Bounds: " + pprint.pformat(bounds))
-
-            # apply a transformation to the bounds (transformation remains the same for previous bound)
-            taken_services.append(service)
-            taken_functions.append(function)
-            transformed_bounds = list()
-            for index, bound in enumerate(bounds):
-                transformation, params = self._get_transformation(taken_services[:index], taken_functions[:index])
-                logging.debug("Transformation: " + str(transformation) + ", " + str(bound) + ", " + str(params))
-                transformed_bound = transformation(bound, *params)
-                if index > 0:
-                    transformed_bound = transformed_bound*transformed_bounds[index-1]
-                transformed_bounds.append(transformed_bound)
-            logging.debug("Transformed bounds: " + pprint.pformat(transformed_bounds))
-            transformed_bounds = [int(x*100) for x in transformed_bounds]
-            logging.debug("Final bounds: " + pprint.pformat(transformed_bounds))
-
-            # range
-            inf = transformed_bounds[-1]
-            sup = transformed_bounds[-2]
-            if inf == 0:
-                inf = 1
-        else:
-            inf = 1
-            sup = 100
-        logging.debug("inf: " + str(inf) + " | sup: " + str(sup))
-
-        # calculate a pseudo-random normalized utility on 1. resource usage !(2. bundle+node_name+services+functions)
-        function_consumption = self._get_function_average_consumption(function)
-        # spreaded_consumption = self._gen_log_func(function_consumption, 0, 1, 40, 1, 54.598)
-        spreaded_consumption = self._gen_log_func(function_consumption, 0, 1, 30, 1, 20.0855)  # [0.00, 0.20] +-0.05
-
-        logging.debug("av_decimal_consumption: " + str(function_consumption))
-        logging.debug("spreaded_consumption: " + str(spreaded_consumption))
-
-        utility = 1 - spreaded_consumption
-
-        # apply node-based scaling
-        # scaling_factor = 0.5
-        # scaling_factor = int(hashlib.sha256((self.sdo_name + service + node).encode()).hexdigest(), 16) / 2 ** 256
-        #if len(taken_services) > 1 and node not in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-        #    scaling_factor = (0.1 - 0) * scaling_factor
-        # utility = utility*scaling_factor
-        logging.debug("node-based scaled utility: " + str(utility))
-
-        # apply a scaling (given for orchestrator)
-        # scaling_factor = 0.5
-        # scaling_factor = int(hashlib.sha256(("-" + self.sdo_name).encode('utf-8')).hexdigest(), 16)/2**256
-        # utility = utility*scaling_factor
-        logging.debug("sdo-based scaled utility: " + str(utility))
-
-        # put the utility value between inf and sup
-        utility = (sup - inf) * utility + inf
-        logging.debug("bounded utility: " + str(utility))
-
-        logging.debug("marginal_utility for function '" + function + "' on service '" + service + " ... \n" +
-                      " ... taken services " + str(taken_services) + " ... \n" +
-                      " ... and functions " + str(taken_functions) + " ... \n" +
-                      " ... is: " + str(utility))
-        if utility < 5:
-            utility = 5
-        return utility
-
-    def _greed_marginal_utility(self, bid_bundle, service, function, node, submodular=True):
-        """
-        Function returning a sub-modular for the given function:node.
-        The utility is:
-         1. higher for function with an high resource usage
-         2. higher for already used nodes
-         3. between 0 and 100
-        :param bid_bundle:
-        :param service:
-        :param function:
-        :param node:
-        :return:
-        """
-        logging.debug(" - Getting utility for function '" + function + "' on service '" + service + "'")
-
-        # put a placeholder element just to avoid zip() complain
-        bid_bundle['.'] = {'function': '.', 'added_at': 0}
-        # create two lists of services and functions that are in the bundle, temporally ordered (decreasing utility)
-        taken_services, taken_functions = zip(*sorted([(k, v['function']) for k, v in bid_bundle.items()],
-                                                      key=lambda x: bid_bundle[x[0]]['added_at']))
-        # remove the placeholder
-        del bid_bundle['.']
-        taken_services = list(taken_services)[1:]
-        taken_functions = list(taken_functions)[1:]
-
-        logging.debug("Services in bundle: " + pprint.pformat(taken_services))
-        logging.debug("Functions in bundle: " + pprint.pformat(taken_functions))
-
-        # Average consumption of first function of the bundle bounds all the utilities
-        first_function_consumption = self._get_function_average_consumption((taken_functions + [function])[0])
-        # first_function_spreaded_consumption = self._gen_log_func(first_function_consumption, 0, 1, 40, 1, 54.598)
-        first_function_spreaded_consumption = self._gen_log_func(first_function_consumption, 0, 1, 30, 1, 20.0855)
-        logging.debug("First function scalar: " + str(first_function_spreaded_consumption))
-
-        if submodular:
-            # bounds
-            bounds = [((len(self.service_bundle)-x)/len(self.service_bundle)) for x in range(len(taken_services)+2)]
-            logging.debug("Bounds: " + pprint.pformat(bounds))
-
-            # apply a transformation to the bounds (transformation remains the same for previous bound)
-            taken_services.append(service)
-            taken_functions.append(function)
-            transformed_bounds = list()
-            for index, bound in enumerate(bounds):
-                transformation, params = self._get_transformation(taken_services[:index], taken_functions[:index])
-                logging.debug("Transformation: " + str(transformation) + ", " + str(bound) + ", " + str(params))
-                transformed_bound = transformation(bound, *params)
-                if index > 0:
-                    transformed_bound = transformed_bound*transformed_bounds[index-1]
-                transformed_bounds.append(transformed_bound)
-            logging.debug("Transformed bounds: " + pprint.pformat(transformed_bounds))
-            transformed_bounds = [int(x*100) for x in transformed_bounds]
-            logging.debug("Final bounds: " + pprint.pformat(transformed_bounds))
-
-            # range
-            inf = transformed_bounds[-1]
-            sup = transformed_bounds[-2]
-            if inf == 0:
-                inf = 1
-        else:
-            inf = 1
-            sup = 100
-        logging.debug("inf: " + str(inf) + " | sup: " + str(sup))
-
-        # calculate a pseudo-random normalized utility on 1. resource usage !(2. bundle+node_name+services+functions)
-        function_consumption = self._get_function_average_consumption(function)
-        # spreaded_consumption = self._gen_log_func(function_consumption, 0, 1, 40, 1, 54.598)
-        spreaded_consumption = self._gen_log_func(function_consumption, 0, 1, 30, 1, 20.0855)  # [0.00, 0.20] +-0.05
-
-        logging.debug("av_decimal_consumption: " + str(function_consumption))
-        logging.debug("spreaded_consumption: " + str(spreaded_consumption))
-
-        utility = spreaded_consumption
-
-        # apply node-based scaling
-        # scaling_factor = 0.5
-        scaling_factor = int(hashlib.sha256((self.sdo_name + node + service).encode()).hexdigest(), 16) / 2 ** 256
-        # if len(taken_services) > 1 and node not in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-        #    scaling_factor = (0.1 - 0) * scaling_factor
-        utility = utility*scaling_factor
-        logging.debug("node-based scaled utility: " + str(utility))
-
-        # apply a scaling (given for orchestrator)
-        # scaling_factor = 0.5
-        # scaling_factor = int(hashlib.sha256(("--" + self.sdo_name).encode('utf-8')).hexdigest(), 16)/2**256
-        # utility = utility*scaling_factor
-        logging.debug("sdo-based scaled utility: " + str(utility))
-
-        # put the utility value between inf and sup
-        utility = (sup - inf) * utility + inf
-        logging.debug("bounded utility: " + str(utility))
-
-        logging.debug("marginal_utility for function '" + function + "' on service '" + service + " ... \n" +
-                      " ... taken services " + str(taken_services) + " ... \n" +
-                      " ... and functions " + str(taken_functions) + " ... \n" +
-                      " ... is: " + str(utility))
-        if utility < 5:
-            utility = 5
-        return utility
-
-    def _load_balancer_marginal_utility(self, bid_bundle, service, function, node, submodular=True):
-        """
-        Function returning a sub-modular for the given function:node.
-        The utility is:
-         1. higher for not used nodes
-         2. between 0 and 100
-        :param bid_bundle:
-        :param service:
-        :param function:
-        :param node:
-        :return:
-        """
-        logging.debug(" - Getting utility for function '" + function + "' on service '" + service + "'")
-
-        # put a placeholder element just to avoid zip() complain
-        bid_bundle['.'] = {'function': '.', 'added_at': 0}
-        # create two lists of services and functions that are in the bundle, temporally ordered (decreasing utility)
-        taken_services, taken_functions = zip(*sorted([(k, v['function']) for k, v in bid_bundle.items()],
-                                                      key=lambda x: bid_bundle[x[0]]['added_at']))
-        # remove the placeholder
-        del bid_bundle['.']
-        taken_services = list(taken_services)[1:]
-        taken_functions = list(taken_functions)[1:]
-
-        logging.debug("Services in bundle: " + pprint.pformat(taken_services))
-        logging.debug("Functions in bundle: " + pprint.pformat(taken_functions))
-
-        # Average consumption of first function of the bundle bounds all the utilities
-        first_function_consumption = self._get_function_average_consumption((taken_functions + [function])[0])
-        # first_function_spreaded_consumption = self._gen_log_func(first_function_consumption, 0, 1, 40, 1, 54.598)
-        first_function_spreaded_consumption = self._gen_log_func(first_function_consumption, 0, 1, 30, 1, 20.0855)
-        logging.debug("First function scalar: " + str(first_function_spreaded_consumption))
-
-        if submodular:
-            # bounds
-            bounds = [((len(self.service_bundle)-x)/len(self.service_bundle)) for x in range(len(taken_services)+2)]
-            logging.debug("Bounds: " + pprint.pformat(bounds))
-
-            # apply a transformation to the bounds (transformation remains the same for previous bound)
-            taken_services.append(service)
-            taken_functions.append(function)
-            transformed_bounds = list()
-            for index, bound in enumerate(bounds):
-                transformation, params = self._get_transformation(taken_services[:index], taken_functions[:index])
-                logging.debug("Transformation: " + str(transformation) + ", " + str(bound) + ", " + str(params))
-                transformed_bound = transformation(bound, *params)
-                if index > 0:
-                    transformed_bound = transformed_bound*transformed_bounds[index-1]
-                transformed_bounds.append(transformed_bound)
-            logging.debug("Transformed bounds: " + pprint.pformat(transformed_bounds))
-            transformed_bounds = [int(x*100) for x in transformed_bounds]
-            logging.debug("Final bounds: " + pprint.pformat(transformed_bounds))
-
-            # range
-            inf = transformed_bounds[-1]
-            sup = transformed_bounds[-2]
-            if inf == 0:
-                inf = 1
-        else:
-            inf = 1
-            sup = 100
-        logging.debug("inf: " + str(inf) + " | sup: " + str(sup))
-
-        # calculate a pseudo-random normalized utility on 1. resource usage !(2. bundle+node_name+services+functions)
-        function_consumption = self._get_function_average_consumption(function)
-        # spreaded_consumption = self._gen_log_func(function_consumption, 0, 1, 40, 1, 54.598)
-        spreaded_consumption = self._gen_log_func(function_consumption, 0, 1, 30, 1, 20.0855)  # [0.00, 0.20] +-0.05
-
-        logging.debug("av_decimal_consumption: " + str(function_consumption))
-        logging.debug("spreaded_consumption: " + str(spreaded_consumption))
-
-        utility = 0.5
-
-        # apply node-based scaling
-        # scaling_factor = 0.5
-        scaling_factor = int(hashlib.sha256((self.sdo_name + service + node).encode()).hexdigest(), 16) / 2 ** 256
-        if len(taken_services) > 1 and node in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-            scaling_factor = (0.1 - 0) * scaling_factor
-        utility = utility*scaling_factor
-        logging.debug("node-based scaled utility: " + str(utility))
-
-        # apply a scaling (given for orchestrator)
-        # scaling_factor = 0.5
-        # scaling_factor = int(hashlib.sha256(("--" + self.sdo_name).encode('utf-8')).hexdigest(), 16)/2**256
-        # utility = utility*scaling_factor
-        logging.debug("sdo-based scaled utility: " + str(utility))
-
-        # put the utility value between inf and sup
-        utility = (sup - inf) * utility + inf
-        logging.debug("bounded utility: " + str(utility))
-
-        logging.debug("marginal_utility for function '" + function + "' on service '" + service + " ... \n" +
-                      " ... taken services " + str(taken_services) + " ... \n" +
-                      " ... and functions " + str(taken_functions) + " ... \n" +
-                      " ... is: " + str(utility))
-        if utility < 5:
-            utility = 5
-        return utility
-
-    def _node_loading_marginal_utility(self, bid_bundle, service, function, node, submodular=True):
-        """
-        Function returning a sub-modular for the given function:node.
-        The utility is:
-         1. higher for used nodes
-         2. between 0 and 100
-        :param bid_bundle:
-        :param service:
-        :param function:
-        :param node:
-        :return:
-        """
-        logging.debug(" - Getting utility for function '" + function + "' on service '" + service + "'")
-
-        # put a placeholder element just to avoid zip() complain
-        bid_bundle['.'] = {'function': '.', 'added_at': 0}
-        # create two lists of services and functions that are in the bundle, temporally ordered (decreasing utility)
-        taken_services, taken_functions = zip(*sorted([(k, v['function']) for k, v in bid_bundle.items()],
-                                                      key=lambda x: bid_bundle[x[0]]['added_at']))
-        # remove the placeholder
-        del bid_bundle['.']
-        taken_services = list(taken_services)[1:]
-        taken_functions = list(taken_functions)[1:]
-
-        logging.debug("Services in bundle: " + pprint.pformat(taken_services))
-        logging.debug("Functions in bundle: " + pprint.pformat(taken_functions))
-
-        # Average consumption of first function of the bundle bounds all the utilities
-        first_function_consumption = self._get_function_average_consumption((taken_functions + [function])[0])
-        # first_function_spreaded_consumption = self._gen_log_func(first_function_consumption, 0, 1, 40, 1, 54.598)
-        first_function_spreaded_consumption = self._gen_log_func(first_function_consumption, 0, 1, 30, 1, 20.0855)
-        logging.debug("First function scalar: " + str(first_function_spreaded_consumption))
-
-        if submodular:
-            # bounds
-            bounds = [((len(self.service_bundle)-x)/len(self.service_bundle)) for x in range(len(taken_services)+2)]
-            logging.debug("Bounds: " + pprint.pformat(bounds))
-
-            # apply a transformation to the bounds (transformation remains the same for previous bound)
-            taken_services.append(service)
-            taken_functions.append(function)
-            transformed_bounds = list()
-            for index, bound in enumerate(bounds):
-                transformation, params = self._get_transformation(taken_services[:index], taken_functions[:index])
-                logging.debug("Transformation: " + str(transformation) + ", " + str(bound) + ", " + str(params))
-                transformed_bound = transformation(bound, *params)
-                if index > 0:
-                    transformed_bound = transformed_bound*transformed_bounds[index-1]
-                transformed_bounds.append(transformed_bound)
-            logging.debug("Transformed bounds: " + pprint.pformat(transformed_bounds))
-            transformed_bounds = [int(x*100) for x in transformed_bounds]
-            logging.debug("Final bounds: " + pprint.pformat(transformed_bounds))
-
-            # range
-            inf = transformed_bounds[-1]
-            sup = transformed_bounds[-2]
-            if inf == 0:
-                inf = 1
-        else:
-            inf = 1
-            sup = 100
-        logging.debug("inf: " + str(inf) + " | sup: " + str(sup))
-
-        # calculate a pseudo-random normalized utility on 1. resource usage !(2. bundle+node_name+services+functions)
-        function_consumption = self._get_function_average_consumption(function)
-        # spreaded_consumption = self._gen_log_func(function_consumption, 0, 1, 40, 1, 54.598)
-        spreaded_consumption = self._gen_log_func(function_consumption, 0, 1, 30, 1, 20.0855)  # [0.00, 0.20] +-0.05
-
-        logging.debug("av_decimal_consumption: " + str(function_consumption))
-        logging.debug("spreaded_consumption: " + str(spreaded_consumption))
-
-        utility = 0.5
-
-        # apply node-based scaling
-        # scaling_factor = 0.5
-        scaling_factor = int(hashlib.sha256((self.sdo_name + service + node).encode()).hexdigest(), 16) / 2 ** 256
-        if len(taken_services) > 1 and node not in [bid_bundle[s]['node'] for s in taken_services[:-1]]:
-            scaling_factor = (0.1 - 0) * scaling_factor
-        utility = utility*scaling_factor
-        logging.debug("node-based scaled utility: " + str(utility))
-
-        # apply a scaling (given for orchestrator)
-        # scaling_factor = 0.5
-        # scaling_factor = int(hashlib.sha256(("--" + self.sdo_name).encode('utf-8')).hexdigest(), 16)/2**256
-        # utility = utility*scaling_factor
         logging.debug("sdo-based scaled utility: " + str(utility))
 
         # put the utility value between inf and sup
@@ -1465,7 +991,7 @@ class SdoOrchestrator:
         return sum([SdoOrchestrator._private_node_utility_from_bid_bundle(bid_bundle, node)
                     for node in set([bid_bundle[s]['node'] for s in bid_bundle])])
 
-    def init_bid(self, timestamp=0.0):
+    def init_bid(self, timestamp=0):
         """
         Return a 0-bid
         :param timestamp:
@@ -1518,35 +1044,3 @@ class SdoOrchestrator:
         :return:
         """
         return sum([self.bidding_data[n][sdo]['bid'] for sdo in self.rap.sdos for n in self.rap.nodes])
-
-    def get_service_utility(self):
-        """
-        Computes and returns the real service utility from the implementation bundle
-        :return:
-        """
-        bid_bundle = {}
-        difference = 0
-        for i, (s, f, n, mu) in enumerate(self.detailed_implementations):
-            s_mu = self._marginal_utility(bid_bundle, s, f, n, service_specific=True)
-            s_mu = s_mu/100
-            # s_mu = 1.043935 + (0.0002072756 - 1.043935)/(1 + (s_mu/0.1348168)**1.411127)
-            s_mu = s_mu*100
-            bid_bundle[s] = {"function": f, "node": n, "utility": s_mu, "added_at": i+1}
-            difference += (s_mu - mu)
-        # round utilities
-        bid_bundle = {k: {'function': v['function'], 'node': v['node'], 'utility': int(round(v['utility']))}
-                      for k, v in bid_bundle.items()}
-        return self._private_utility_from_bid_bundle(bid_bundle), difference
-
-    def reset_bids(self, bidding_data):
-        """
-        Release all previous assigned resources and reset implementations and utility
-        :return:
-        """
-        self.implementations = list()
-        self.detailed_implementations = list()
-        self.private_utility = 0
-        # release the bidding on each bidded nodes
-        for node in bidding_data:
-            if bidding_data[node][self.sdo_name] != 0:
-                self.bidding_data[node][self.sdo_name] = self.init_bid(time.time())

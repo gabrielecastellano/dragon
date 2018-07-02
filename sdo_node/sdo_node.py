@@ -6,13 +6,16 @@ from collections import OrderedDict
 from datetime import datetime
 from threading import Lock, Thread, Condition
 
-from config.configuration import Configuration
+from config.config import Configuration
 from config.logging_configuration import LoggingConfiguration
 from sdo_node.agreement.sdo_agreement import SdoAgreement
 from sdo_node.orchestration.sdo_orchestrator import SdoOrchestrator
 from sdo_node.utils.bidding_message import BiddingMessage
 from sdo_node.utils.messaging import Messaging
 from sdo_node.utils.neighborhood import NeighborhoodDetector
+
+
+configuration = Configuration()
 
 
 class SDONode:
@@ -28,10 +31,10 @@ class SDONode:
 
         self.neighborhood_detector = NeighborhoodDetector(sdos=self.rap.sdos,
                                                           base_sdo=self.sdo_name,
-                                                          load_neighborhood=Configuration.LOAD_TOPOLOGY,
-                                                          neighbor_probability=Configuration.NEIGHBOR_PROBABILITY,
-                                                          topology_file=Configuration.TOPOLOGY_FILE,
-                                                          stable_connections=Configuration.STABLE_CONNECTIONS)
+                                                          load_neighborhood=configuration.LOAD_TOPOLOGY,
+                                                          neighbor_probability=configuration.NEIGHBOR_PROBABILITY,
+                                                          topology_file=configuration.TOPOLOGY_FILE,
+                                                          stable_connections=configuration.STABLE_CONNECTIONS)
         self.neighborhood = self.neighborhood_detector.get_neighborhood()
 
         # init messaging
@@ -65,7 +68,7 @@ class SDONode:
 
         # connect
         self._messaging.connect()
-        self._messaging.set_stop_timeout(Configuration.WEAK_AGREEMENT_TIMEOUT, permanent=True)
+        self._messaging.set_stop_timeout(configuration.WEAK_AGREEMENT_TIMEOUT, permanent=True)
 
         # first bidding
         self.sdo_bidder.sdo_orchestrate()
@@ -156,7 +159,7 @@ class SDONode:
         '''
 
         # '''
-        timeout = float(Configuration.ASYNC_TIMEOUT)
+        timeout = float(configuration.ASYNC_TIMEOUT)
         while timeout > 0 \
                 and len([q for q in self.message_queues if q not in self.agree_neighbors and len(self.message_queues[q]) == 0]) > 0 \
                 and self.end_time == 0:
@@ -236,9 +239,9 @@ class SDONode:
                         self.agreement_time = time.time()
                         # set timeout to stop wait messages if nothing new arrives
                         logging.log(LoggingConfiguration.IMPORTANT, " - Waiting " +
-                                    str(Configuration.AGREEMENT_TIMEOUT) +
+                                    str(configuration.AGREEMENT_TIMEOUT) +
                                     " seconds for new messages before stop agreement ...")
-                        self._messaging.set_stop_timeout(Configuration.AGREEMENT_TIMEOUT)
+                        self._messaging.set_stop_timeout(configuration.AGREEMENT_TIMEOUT)
                     else:
                         logging.info("Confirmed last agreement")
 
@@ -296,9 +299,9 @@ class SDONode:
                     logging.log(LoggingConfiguration.IMPORTANT, "====================================================")
                     self.agreement_time = time.time()
                     # set timeout to stop wait messages if nothing new arrives
-                    logging.log(LoggingConfiguration.IMPORTANT, " - Waiting " + str(Configuration.AGREEMENT_TIMEOUT) +
+                    logging.log(LoggingConfiguration.IMPORTANT, " - Waiting " + str(configuration.AGREEMENT_TIMEOUT) +
                                                                 " seconds for new messages before stop agreement ...")
-                    self._messaging.set_stop_timeout(Configuration.AGREEMENT_TIMEOUT)
+                    self._messaging.set_stop_timeout(configuration.AGREEMENT_TIMEOUT)
                 else:
                     logging.info("Confirmed last agreement")
 
@@ -335,7 +338,7 @@ class SDONode:
             if last_begin_time == self.last_time:
                 del self.message_rates[next(reversed(self.message_rates))]
 
-        if sent_time - self.last_time > Configuration.SAMPLE_FREQUENCY:
+        if sent_time - self.last_time > configuration.SAMPLE_FREQUENCY:
             self.message_rates[str(self.last_time) + ":" + str(sent_time)] = self.message_counter - self.sent_count
             self.sent_count = self.message_counter
             self.last_time = sent_time

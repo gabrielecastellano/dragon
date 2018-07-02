@@ -3,7 +3,7 @@ import json
 import logging
 import os
 
-from config.configuration import Configuration
+from config.config import Configuration
 from config.logging_configuration import LoggingConfiguration
 from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
 from sdo_node.sdo_node import SDONode
@@ -14,6 +14,7 @@ def parse_arguments():
     # need to modify global configuration
     global SDO_NAME
     global SERVICE_BUNDLE
+    global CONF_FILE
     global LOG_LEVEL
     global LOG_FILE
 
@@ -56,7 +57,8 @@ def parse_arguments():
         '-d',
         '--conf_file',
         nargs='?',
-        help='Configuration file [currently not supported].'
+        default='config/default-config.ini',
+        help='Configuration file.'
     )
     parser.add_argument(
         '-c',
@@ -70,6 +72,7 @@ def parse_arguments():
 
     SDO_NAME = args.sdo_name
     SERVICE_BUNDLE = args.service
+    CONF_FILE = args.conf_file
     LOG_LEVEL = args.log_level
     LOG_FILE = args.log_file
     if LOG_FILE is None and args.log_on_file:
@@ -79,10 +82,11 @@ def parse_arguments():
 if __name__ == "__main__":
 
     parse_arguments()
+    configuration = Configuration(CONF_FILE)
     LoggingConfiguration(LOG_LEVEL, LOG_FILE).configure_log()
 
     rap = ResourceAllocationProblem()
-    with open(Configuration.RAP_INSTANCE) as rap_file:
+    with open(configuration.RAP_INSTANCE) as rap_file:
         rap.parse_dict(json.loads(rap_file.read()))
     logging.info(rap)
 
@@ -92,16 +96,16 @@ if __name__ == "__main__":
     # Start scheduling
     strong, placement, rates = sdo_node.start_distributed_scheduling()
 
-    placement_filename = Configuration.RESULTS_FOLDER + "/placement_" + SDO_NAME + ".json"
+    placement_filename = configuration.RESULTS_FOLDER + "/placement_" + SDO_NAME + ".json"
     os.makedirs(os.path.dirname(placement_filename), exist_ok=True)
     with open(placement_filename, "w") as f:
         f.write(json.dumps(placement, indent=4))
 
-    rates_filename = Configuration.RESULTS_FOLDER + "/rates_" + SDO_NAME + ".json"
+    rates_filename = configuration.RESULTS_FOLDER + "/rates_" + SDO_NAME + ".json"
     with open(rates_filename, "w") as f:
         f.write(json.dumps(list(rates.items()), indent=4))
 
-    utility_filename = Configuration.RESULTS_FOLDER + "/utility_" + SDO_NAME + ".json"
+    utility_filename = configuration.RESULTS_FOLDER + "/utility_" + SDO_NAME + ".json"
     with open(utility_filename, "w") as f:
         f.write(str(sdo_node.sdo_bidder.private_utility))
 

@@ -3,7 +3,7 @@ import json
 import logging
 import os
 
-from config.configuration import Configuration
+from config.config import Configuration
 from config.logging_configuration import LoggingConfiguration
 from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
 from sdo_node.centralized_node import CentralizedNode
@@ -14,6 +14,7 @@ def parse_arguments():
     # need to modify global configuration
     global SDO_NAMES
     global SERVICE_BUNDLES
+    global CONF_FILE
     global LOG_LEVEL
     global LOG_FILE
 
@@ -50,6 +51,7 @@ def parse_arguments():
         '-d',
         '--conf_file',
         nargs='?',
+        default='config/default-config.ini',
         help='Configuration file [currently not supported].'
     )
     parser.add_argument(
@@ -64,6 +66,7 @@ def parse_arguments():
 
     SDO_NAMES = list()
     SERVICE_BUNDLES = list()
+    CONF_FILE = args.conf_file
 
     last_sdo = None
     for s in args.bundle:
@@ -85,10 +88,11 @@ def parse_arguments():
 if __name__ == "__main__":
 
     parse_arguments()
+    configuration = Configuration(CONF_FILE)
     LoggingConfiguration(LOG_LEVEL, LOG_FILE).configure_log()
 
     rap = ResourceAllocationProblem()
-    with open(Configuration.RAP_INSTANCE) as rap_file:
+    with open(configuration.RAP_INSTANCE) as rap_file:
         rap.parse_dict(json.loads(rap_file.read()))
     logging.info(rap)
 
@@ -107,12 +111,12 @@ if __name__ == "__main__":
     strong, placements, utilities = sdo_node.start_centralized_scheduling()
 
     for sdo in SDO_NAMES:
-        placement_filename = Configuration.RESULTS_FOLDER + "/placement_" + sdo + ".json"
+        placement_filename = configuration.RESULTS_FOLDER + "/placement_" + sdo + ".json"
         os.makedirs(os.path.dirname(placement_filename), exist_ok=True)
         with open(placement_filename, "w") as f:
             f.write(json.dumps(placements[sdo], indent=4))
 
-        utility_filename = Configuration.RESULTS_FOLDER + "/utility_" + sdo + ".json"
+        utility_filename = configuration.RESULTS_FOLDER + "/utility_" + sdo + ".json"
         with open(utility_filename, "w") as f:
             f.write(str(utilities[sdo]))
 

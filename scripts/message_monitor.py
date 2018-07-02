@@ -1,15 +1,19 @@
 # import pika
 import json
 import time
-import sys
-import signal
+# import sys
+# import signal
 import urllib.request
 
 # from pyrabbit.api import Client
 # import urllib.request
 from urllib.error import HTTPError
 
-from config.configuration import Configuration
+from config.config import Configuration
+
+
+configuration = Configuration()
+
 
 '''
 def get_message_number(queues):
@@ -74,9 +78,10 @@ def signal_handler(signal, frame):
 if __name__ == "__main__":
 
     # signal.signal(signal.SIGINT, signal_handler)
-    file_name = "validation/" + str(Configuration.SDO_NUMBER) + "sdos__" + str(Configuration.NEIGHBOR_PROBABILITY) + "neighbor_prob__" + str(Configuration.NODE_NUMBER) + "nodes__ts.txt"
-    bundle_percentage = Configuration.BUNDLE_PERCENTAGE
-    agreement_timeout = Configuration.AGREEMENT_TIMEOUT
+    file_name = "validation/" + str(configuration.SDO_NUMBER) + "sdos__" + str(configuration.NEIGHBOR_PROBABILITY) \
+                + "neighbor_prob__" + str(configuration.NODE_NUMBER) + "nodes__ts.txt"
+    bundle_percentage = configuration.BUNDLE_PERCENTAGE
+    agreement_timeout = configuration.AGREEMENT_TIMEOUT
 
     # create a password manager
     password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
@@ -99,7 +104,7 @@ if __name__ == "__main__":
 
     # cl = Client('localhost:55672', 'guest', 'guest')
 
-    sdos = ["sdo" + str(n) for n in range(Configuration.SDO_NUMBER)]
+    sdos = ["sdo" + str(n) for n in range(configuration.SDO_NUMBER)]
 
     begin = False
     begining_time = time.time()
