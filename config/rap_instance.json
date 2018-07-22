@@ -10,6 +10,7 @@
         "sdo7",
         "sdo8",
         "sdo9"
+        "sdo2"
     ],
     "functions": [
         "f1",
@@ -36,10 +37,7 @@
         "bandwidth"
     ],
     "nodes": [
-        "node0",
-        "node1",
-        "node2",
-        "node3"
+        "node0"
     ],
     "consumption": {
         "f1": {

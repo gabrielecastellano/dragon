@@ -1,6 +1,6 @@
 import pika
 
-from config.configuration import Configuration
+from config.config import Configuration
 
 
 def purge_queues(queues):
@@ -15,5 +15,6 @@ def purge_queues(queues):
 
 
 if __name__ == "__main__":
-    sdos = ["sdo" + str(n) for n in range(Configuration.SDO_NUMBER)]
+    configuration = Configuration()
+    sdos = ["sdo" + str(n) for n in range(configuration.SDO_NUMBER)]
     purge_queues(sdos)

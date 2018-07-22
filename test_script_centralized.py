@@ -8,24 +8,26 @@ import itertools
 
 from subprocess import TimeoutExpired
 
-from config.configuration import Configuration
+from config.config import Configuration
 from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
 
 
 p_list = list()
 
 # [ Configuration ]
-print("SDO_NUMBER:           " + str(Configuration.SDO_NUMBER))
-print("NEIGHBOR_PROBABILITY: " + str(Configuration.NEIGHBOR_PROBABILITY))
-print("NODE_NUMBER:          " + str(Configuration.NODE_NUMBER))
-print("BUNDLE_PERCENTAGE:    " + str(Configuration.BUNDLE_PERCENTAGE))
+CONF_FILE = 'default-config.ini'
+configuration = Configuration(CONF_FILE)
+print("SDO_NUMBER:           " + str(configuration.SDO_NUMBER))
+print("NEIGHBOR_PROBABILITY: " + str(configuration.NEIGHBOR_PROBABILITY))
+print("NODE_NUMBER:          " + str(configuration.NODE_NUMBER))
+print("BUNDLE_PERCENTAGE:    " + str(configuration.BUNDLE_PERCENTAGE))
 
 # [ RAP instance ]
 rap = ResourceAllocationProblem()
-with open(Configuration.RAP_INSTANCE, mode="r") as rap_file:
+with open(configuration.RAP_INSTANCE, mode="r") as rap_file:
     rap.parse_dict(json.loads(rap_file.read()))
-sdos = ["sdo"+str(n) for n in range(Configuration.SDO_NUMBER)]
-nodes = ["node" + str(n) for n in range(Configuration.NODE_NUMBER)]
+sdos = ["sdo"+str(n) for n in range(configuration.SDO_NUMBER)]
+nodes = ["node" + str(n) for n in range(configuration.NODE_NUMBER)]
 '''
 services = ["s1", "s2", "s3", "s4", "s5", "s6"]
 functions = ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9"]
@@ -63,17 +65,17 @@ implementation = {
 '''
 rap.sdos = sdos
 rap.nodes = nodes
-with open(Configuration.RAP_INSTANCE, mode="w") as rap_file:
+with open(configuration.RAP_INSTANCE, mode="w") as rap_file:
     rap_file.write(json.dumps(rap.to_dict(), indent=4))
 
 # clean result directory
-shutil.rmtree(Configuration.RESULTS_FOLDER, ignore_errors=True)
+shutil.rmtree(configuration.RESULTS_FOLDER, ignore_errors=True)
 
 # print total resources
 total_resources = rap.get_total_resources_amount()
 average_resource_per_function = {r: sum([rap.get_function_resource_consumption(f)[r] for f in rap.functions])/len(rap.functions) for r in rap.resources}
 average_resource_percentage_per_function = sum([average_resource_per_function[r]/total_resources[r] for r in rap.resources])/len(rap.resources)
-statistical_bundle_len = len(rap.services)*(Configuration.BUNDLE_PERCENTAGE/100)
+statistical_bundle_len = len(rap.services)*(configuration.BUNDLE_PERCENTAGE/100)
 average_resource_demand = statistical_bundle_len*average_resource_percentage_per_function
 print("- Resources Statistics - ")
 print("Total resources: \n" + pprint.pformat(total_resources))
@@ -81,15 +83,23 @@ print("Average resources per function: \n" + pprint.pformat(average_resource_per
 print("Average demand percentage per function: " + str(round(average_resource_percentage_per_function, 3)))
 print("Statistical bundle len: " + str(round(statistical_bundle_len, 2)))
 print("Statistical average demand percentage per bundle: " + str(round(average_resource_demand, 3)))
-print("Statistical total demand percentage: " + str(round(average_resource_demand*Configuration.SDO_NUMBER, 3)))
+print("Statistical total demand percentage: " + str(round(average_resource_demand*configuration.SDO_NUMBER, 3)))
 print("- -------------------- - ")
 
 print("- Run Orchestration - ")
 bundle_arg = []
-for i in range(Configuration.SDO_NUMBER):
+for i in range(configuration.SDO_NUMBER):
     sdo_name = "sdo" + str(i)
     service_bundle = [s for s in rap.services
-                      if int(str(int(hashlib.sha256((sdo_name+s).encode()).hexdigest(), 16))[-2:]) < Configuration.BUNDLE_PERCENTAGE]
+                      if int(str(int(hashlib.sha256((sdo_name+s).encode()).hexdigest(), 16))[-2:]) < configuration.BUNDLE_PERCENTAGE]
+    if sdo_name == "sdo9":
+        service_bundle = [s for s in rap.services
+                          if int(str(int(hashlib.sha256(("sdo10"+s).encode()).hexdigest(), 16))[-2:]) < configuration.BUNDLE_PERCENTAGE]
+    elif sdo_name == "sdo15":
+        service_bundle = [s for s in rap.services
+                          if int(str(int(hashlib.sha256(("sdo14"+s).encode()).hexdigest(), 16))[-2:]) < configuration.BUNDLE_PERCENTAGE]
+    elif sdo_name == "sdo19":
+        service_bundle = service_bundle[:3]
     if len(service_bundle) == 0:
         service_bundle.append(rap.services[0])
     print(sdo_name + " : " + str(service_bundle))
@@ -98,10 +108,10 @@ for i in range(Configuration.SDO_NUMBER):
 bundle_arg = bundle_arg[:-1]
 print(" ".join(bundle_arg))
 
-p = subprocess.Popen(["python3", "centralized_main.py"] + bundle_arg + ["-l", Configuration.LOG_LEVEL, "-o"])
+p = subprocess.Popen(["python3", "centralized_main.py"] + bundle_arg + ["-l", configuration.LOG_LEVEL, "-d", CONF_FILE, "-o"])
 
 try:
-    p.wait(timeout=50)
+    p.wait(timeout=30)
 except TimeoutExpired:
     p.kill()
 
@@ -110,10 +120,10 @@ print(" - Collect Results - ")
 placements = dict()
 message_rates = dict()
 private_utilities = list()
-for i in range(Configuration.SDO_NUMBER):
+for i in range(configuration.SDO_NUMBER):
     sdo_name = "sdo" + str(i)
-    utility_file = Configuration.RESULTS_FOLDER + "/utility_" + sdo_name + ".json"
-    placement_file = Configuration.RESULTS_FOLDER + "/placement_" + sdo_name + ".json"
+    utility_file = configuration.RESULTS_FOLDER + "/utility_" + sdo_name + ".json"
+    placement_file = configuration.RESULTS_FOLDER + "/placement_" + sdo_name + ".json"
 
     try:
         with open(utility_file, "r") as f:
@@ -129,7 +139,7 @@ for i in range(Configuration.SDO_NUMBER):
 print("Sum of private utilities: " + str(sum(private_utilities)))
 
 # print assignment info
-placement_file = Configuration.RESULTS_FOLDER + "/results.json"
+placement_file = configuration.RESULTS_FOLDER + "/results.json"
 with open(placement_file, "w") as f:
     f.write(json.dumps(placements, indent=4))
 residual_resources = dict(rap.available_resources)
@@ -142,4 +152,4 @@ print("Allocation: \n" + pprint.pformat(placements))
 print("Residual resources: \n" + pprint.pformat(residual_resources))
 print("Percentage of assigned resources: " + str(round(used_resources_percentage, 3)))
 print("Percentage of successfully allocated bundles: " + str(round(len([u for u in private_utilities
-                                                                        if u > 0]), 3)/Configuration.SDO_NUMBER))
+                                                                        if u > 0]), 3)/configuration.SDO_NUMBER))

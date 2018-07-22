@@ -89,12 +89,7 @@ class SdoAgreement:
             # node has been overbidded
             logging.log(LoggingConfiguration.IMPORTANT, "Node has been overbidded!!")
             # empty implementations
-            self.sdo_bidder.implementations = list()
-            self.sdo_bidder.private_utility = 0
-            # release the bidding on each bidded nodes
-            for node in current_bidding_data:
-                if current_bidding_data[node][self.sdo_name] != 0:
-                    self.sdo_bidder.bidding_data[node][self.sdo_name] = self.sdo_bidder.init_bid(time.time())
+            self.sdo_bidder.reset_bids(current_bidding_data)
             # try to repeat bidding on residual resources
             # self.sdo_bidder.sdo_bidding()
             # update & rebroadcast
@@ -320,12 +315,7 @@ class SdoAgreement:
             # node has been overbidded
             logging.log(LoggingConfiguration.IMPORTANT, "Node has been overbidded!!")
             # empty implementations
-            self.sdo_bidder.implementations = list()
-            self.sdo_bidder.private_utility = 0
-            # release the bidding on each bidded nodes
-            for node in current_bidding_data:
-                if current_bidding_data[node][self.sdo_name] != 0:
-                    self.sdo_bidder.bidding_data[node][self.sdo_name] = self.sdo_bidder.init_bid(time.time())
+            self.sdo_bidder.reset_bids(current_bidding_data)
             # try to repeat bidding on residual resources
             # self.sdo_bidder.sdo_bidding()
             # update & rebroadcast

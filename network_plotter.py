@@ -2,8 +2,11 @@
 # from plotly.graph_objs import *
 # import networkx as nx
 
-from config.configuration import Configuration
+from config.config import Configuration
 from sdo_node.utils.neighborhood import NeighborhoodDetector
+
+
+configuration = Configuration()
 
 
 class NetworkPlotter:
@@ -15,10 +18,10 @@ class NetworkPlotter:
         for sdo in sdos:
             neighbors = NeighborhoodDetector(sdos=sdos,
                                              base_sdo=sdo,
-                                             load_neighborhood=Configuration.LOAD_TOPOLOGY,
-                                             neighbor_probability=Configuration.NEIGHBOR_PROBABILITY,
-                                             topology_file=Configuration.TOPOLOGY_FILE,
-                                             stable_connections=Configuration.STABLE_CONNECTIONS).get_neighborhood()
+                                             load_neighborhood=configuration.LOAD_TOPOLOGY,
+                                             neighbor_probability=configuration.NEIGHBOR_PROBABILITY,
+                                             topology_file=configuration.TOPOLOGY_FILE,
+                                             stable_connections=configuration.STABLE_CONNECTIONS).get_neighborhood()
             # self.topology.add_edges_from([(sdo, sdo2) for sdo2 in neighbors])
             self.neighborhoods[sdo] = neighbors
 
