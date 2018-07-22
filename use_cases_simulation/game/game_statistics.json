@@ -1,0 +1,61 @@
+{
+    "users": {
+        "node0": 1,
+        "node1": 0,
+        "node2": 0,
+        "node3": 0,
+        "node4": 0,
+        "node5": 0,
+        "node6": 0,
+        "node7": 0,
+        "node8": 0,
+        "node9": 0
+    },
+    "max-copies": 4,
+    "current-copies": {
+        "node0": 1,
+        "node1": 0,
+        "node2": 0,
+        "node3": 0,
+        "node4": 0,
+        "node5": 0,
+        "node6": 0,
+        "node7": 0,
+        "node8": 0,
+        "node9": 0
+    },
+    "traffic": {
+        "node0": 3,
+        "node1": 6,
+        "node2": 4,
+        "node3": 0,
+        "node4": 0,
+        "node5": 0,
+        "node6": 0,
+        "node7": 0,
+        "node8": 0,
+        "node9": 0
+    },
+    "function": "f10",
+    "topology": {
+        "node0:node4": 50,
+        "node1:node2": 50,
+        "node1:node4": 50,
+        "node3:node4": 50,
+        "node4:node5": 50,
+        "node4:node7": 50,
+        "node5:node9": 50,
+        "node6:node9": 50,
+        "node8:node9": 50,
+        "node4:node0": 50,
+        "node2:node1": 50,
+        "node4:node1": 50,
+        "node4:node3": 50,
+        "node5:node4": 50,
+        "node7:node4": 50,
+        "node9:node5": 50,
+        "node9:node6": 50,
+        "node9:node8": 50
+    },
+    "max-latency": 210
+}
