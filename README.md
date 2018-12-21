@@ -1,4 +1,4 @@
-## A Distributed Service Orchestration with Guarantees
+## A Distributed Resource AssiGnment and Orchestration algorithm with Guarantees
 
 Updated Jul 30, 2018
 
