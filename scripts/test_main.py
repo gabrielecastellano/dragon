@@ -3,9 +3,9 @@ import random
 import pprint
 import colorlog
 
-from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
-from sdo_node.agreement.sdo_agreement import SdoAgreement
-from sdo_node.orchestration.sdo_orchestrator import SdoOrchestrator
+from resource_assignment.resoruce_allocation_problem import ResourceAllocationProblem
+from dragon_agent.agreement.sdo_agreement import SdoAgreement
+from dragon_agent.orchestration.sdo_orchestrator import SdoOrchestrator
 
 LOG_ON_FILE = False
 LOG_FILE = "sdo1_log.log"

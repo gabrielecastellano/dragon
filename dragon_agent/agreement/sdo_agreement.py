@@ -5,8 +5,8 @@ import pprint
 import time
 
 from config.logging_configuration import LoggingConfiguration
-from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
-from sdo_node.orchestration.sdo_orchestrator import SdoOrchestrator
+from resource_assignment.resource_assignment_problem import ResourceAllocationProblem
+from dragon_agent.orchestration.sdo_orchestrator import SdoOrchestrator
 
 
 class SdoAgreement:

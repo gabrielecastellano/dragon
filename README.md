@@ -1,4 +1,4 @@
-## A Distributed Resource AssiGnment and Orchestration algorithm with Guarantees
+## DRAGON v1.0 README
 
 Updated Jul 30, 2018
 

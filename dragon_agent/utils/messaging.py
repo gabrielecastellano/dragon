@@ -5,8 +5,8 @@ import threading
 import pika
 
 from config.logging_configuration import LoggingConfiguration
-from sdo_node.utils.bidding_message import BiddingMessage
-from sdo_node.utils.singleton import Singleton
+from dragon_agent.utils.bidding_message import BiddingMessage
+from dragon_agent.utils.singleton import Singleton
 
 
 class Messaging(object, metaclass=Singleton):

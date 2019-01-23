@@ -3,12 +3,12 @@ import logging
 import pprint
 
 from config.logging_configuration import LoggingConfiguration
-from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
-from sdo_node.agreement.sdo_agreement import SdoAgreement
-from sdo_node.orchestration.sdo_orchestrator import SdoOrchestrator
-from sdo_node.utils.bidding_message import BiddingMessage
-from sdo_node.utils.messaging import Messaging
-from sdo_node.utils.neighborhood import NeighborhoodDetector
+from resource_assignment.resoruce_allocation_problem import ResourceAllocationProblem
+from dragon_agent.agreement.sdo_agreement import SdoAgreement
+from dragon_agent.orchestration.sdo_orchestrator import SdoOrchestrator
+from dragon_agent.utils.bidding_message import BiddingMessage
+from dragon_agent.utils.messaging import Messaging
+from dragon_agent.utils.neighborhood import NeighborhoodDetector
 
 AGREEMENT_TIMEOUT = 10
 

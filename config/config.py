@@ -1,8 +1,8 @@
 import configparser
 import os
 import inspect
-from exceptions import WrongConfigurationFile
-from sdo_node.utils.singleton import Singleton
+from dragon_agent.exceptions import WrongConfigurationFile
+from dragon_agent.utils.singleton import Singleton
 
 
 class Configuration(object, metaclass=Singleton):
@@ -34,8 +34,8 @@ class Configuration(object, metaclass=Singleton):
             self.TOPOLOGY_FILE = config.get('neighborhood', 'topology_file')
 
             # [problem_size]
-            self.SDO_NUMBER = config.getint('problem_size', 'sdo_number')
-            self.NODE_NUMBER = config.getint('problem_size', 'node_number')
+            self.SDO_NUMBER = config.getint('problem_size', 'agents_number')
+            self.NODE_NUMBER = config.getint('problem_size', 'nodes_number')
             self.BUNDLE_PERCENTAGE = config.getint('problem_size', 'bundle_percentage')
 
             # [utility]

@@ -11,8 +11,8 @@ from functools import reduce
 
 from config.config import Configuration
 from config.logging_configuration import LoggingConfiguration
-from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
-from sdo_node.orchestration.exceptions import NoFunctionsLeft, SchedulingTimeout
+from resource_assignment.resoruce_allocation_problem import ResourceAllocationProblem
+from dragon_agent.orchestration.exceptions import NoFunctionsLeft, SchedulingTimeout
 
 
 configuration = None

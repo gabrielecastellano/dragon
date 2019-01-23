@@ -6,14 +6,14 @@ import os
 from config.config import Configuration
 from config.logging_configuration import LoggingConfiguration
 from resource_assignment.resource_assignment_problem import ResourceAllocationProblem
-from dragon_agent.dragon_agent import SDONode
+from dragon_agent.centralized_node import CentralizedNode
 
 
 def parse_arguments():
 
     # need to modify global configuration
-    global SDO_NAME
-    global SERVICE_BUNDLE
+    global SDO_NAMES
+    global SERVICE_BUNDLES
     global CONF_FILE
     global LOG_LEVEL
     global LOG_FILE
@@ -21,16 +21,10 @@ def parse_arguments():
     # define arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        'sdo_name',
-        metavar='sdo-name',
-        type=str,
-        help='Name of the agent.',
-    )
-    parser.add_argument(
-        'service',
+        'bundle',
         type=str,
         nargs='+',
-        help='List of services.',
+        help='Name of the sdo + services.',
     )
     parser.add_argument(
         '-l',
@@ -58,7 +52,7 @@ def parse_arguments():
         '--conf_file',
         nargs='?',
         default='config/default-config.ini',
-        help='Configuration file.'
+        help='Configuration file [currently not supported].'
     )
     parser.add_argument(
         '-c',
@@ -70,13 +64,25 @@ def parse_arguments():
     # parse arguments
     args = parser.parse_args()
 
-    SDO_NAME = args.sdo_name
-    SERVICE_BUNDLE = args.service
+    SDO_NAMES = list()
+    SERVICE_BUNDLES = list()
     CONF_FILE = args.conf_file
+
+    last_sdo = None
+    for s in args.bundle:
+        if s == ',':
+            last_sdo = None
+        elif last_sdo is None:
+            last_sdo = s
+            SDO_NAMES.append(s)
+            SERVICE_BUNDLES.append(list())
+        else:
+            SERVICE_BUNDLES[-1].append(s)
+
     LOG_LEVEL = args.log_level
     LOG_FILE = args.log_file
     if LOG_FILE is None and args.log_on_file:
-        LOG_FILE = SDO_NAME + ".log"
+        LOG_FILE = "centralized.log"
 
 
 if __name__ == "__main__":
@@ -90,23 +96,28 @@ if __name__ == "__main__":
         rap.parse_dict(json.loads(rap_file.read()))
     logging.info(rap)
 
+    print(len(SDO_NAMES))
+
+    '''
+    for i, sdo in enumerate(SDO_NAMES):
+        logging.info(sdo + " [" + ", ".join(SERVICE_BUNDLES[i]) + "]")
+        print(sdo + " [" + ", ".join(SERVICE_BUNDLES[i]) + "]")
+    '''
+
     # SDO node
-    sdo_node = SDONode(SDO_NAME, rap, SERVICE_BUNDLE)
+    sdo_node = CentralizedNode(SDO_NAMES, rap, SERVICE_BUNDLES)
 
     # Start scheduling
-    strong, placement, rates = sdo_node.start_distributed_scheduling()
+    strong, placements, utilities = sdo_node.start_centralized_scheduling()
 
-    placement_filename = configuration.RESULTS_FOLDER + "/placement_" + SDO_NAME + ".json"
-    os.makedirs(os.path.dirname(placement_filename), exist_ok=True)
-    with open(placement_filename, "w") as f:
-        f.write(json.dumps(placement, indent=4))
+    for sdo in SDO_NAMES:
+        placement_filename = configuration.RESULTS_FOLDER + "/placement_" + sdo + ".json"
+        os.makedirs(os.path.dirname(placement_filename), exist_ok=True)
+        with open(placement_filename, "w") as f:
+            f.write(json.dumps(placements[sdo], indent=4))
 
-    rates_filename = configuration.RESULTS_FOLDER + "/rates_" + SDO_NAME + ".json"
-    with open(rates_filename, "w") as f:
-        f.write(json.dumps(list(rates.items()), indent=4))
+        utility_filename = configuration.RESULTS_FOLDER + "/utility_" + sdo + ".json"
+        with open(utility_filename, "w") as f:
+            f.write(str(utilities[sdo]))
 
-    utility_filename = configuration.RESULTS_FOLDER + "/utility_" + SDO_NAME + ".json"
-    with open(utility_filename, "w") as f:
-        f.write(str(sdo_node.sdo_bidder.private_utility))
-
-    exit(sdo_node.sdo_bidder.private_utility)
+    exit(sum(utilities.values()))

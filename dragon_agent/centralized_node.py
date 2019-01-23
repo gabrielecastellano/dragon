@@ -3,7 +3,7 @@ import pprint
 import time
 
 from config.logging_configuration import LoggingConfiguration
-from sdo_node.orchestration.sdo_orchestrator import SdoOrchestrator
+from dragon_agent.orchestration.sdo_orchestrator import SdoOrchestrator
 
 
 class CentralizedNode:

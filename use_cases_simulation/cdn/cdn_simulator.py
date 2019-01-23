@@ -10,7 +10,7 @@ from numpy import random
 from subprocess import TimeoutExpired
 
 from config.config import Configuration
-from resource_allocation.resoruce_allocation_problem import ResourceAllocationProblem
+from resource_assignment.resoruce_allocation_problem import ResourceAllocationProblem
 
 
 def herfindahl_index(users_per_node):
